@@ -1,1 +1,6 @@
 outputs/
+__pycache__/
+*.pyc
+*tar.gz
+converted_1031/
+.codex

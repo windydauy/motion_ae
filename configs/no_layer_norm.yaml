@@ -1,5 +1,5 @@
 # ============================================================
-# motion_ae 默认配置
+# motion_ae 默认配置（关闭 LayerNorm 版本）
 # ============================================================
 
 # --- 数据 ---
@@ -46,9 +46,9 @@ stride: 1
 model:
   encoder_hidden_dims: [4096, 2048, 1024, 512, 256]
   decoder_hidden_dims: [4096, 2048, 1024, 512, 256]
-  ifsq_levels: [64, 64, 64, 64, 64, 64, 64, 64]  # latent_dim = len(ifsq_levels) = 8
+  ifsq_levels: [64, 64, 64, 64, 64, 64, 64, 64]  # latent_dim = len(ifsq_levels) = 64
   activation: "relu"
-  use_layer_norm: true
+  use_layer_norm: false
 
 # --- 训练 ---
 training:
