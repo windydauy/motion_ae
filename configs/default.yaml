@@ -1,0 +1,94 @@
+# ============================================================
+# motion_ae 默认配置
+# ============================================================
+
+# --- 数据 ---
+data:
+  # 支持单个 npz 路径或包含 motion.npz 的根目录
+  data_path: "/root/yzh/optitrack_npz/converted_1031"
+  npz_filename: "motion.npz"
+  val_ratio: 0.2          # 按文件级别划分验证集比例
+
+# --- NPZ 键名映射（如果你的 npz 字段名不同，在这里修改） ---
+npz_keys:
+  joint_pos: "joint_pos"
+  joint_vel: "joint_vel"
+  body_pos_w: "body_pos_w"
+  body_quat_w: "body_quat_w"
+  body_lin_vel_w: "body_lin_vel_w"
+  body_ang_vel_w: "body_ang_vel_w"
+  fps: "fps"
+
+# --- Pelvis / Anchor 配置 ---
+pelvis:
+  body_index: 0            # pelvis 在 body 维度中的索引
+
+# --- 特征构建 ---
+feature:
+  # 各特征组及其在最终特征向量中的维度范围（自动计算，此处仅做参考）
+  # joint_pos:       [0, num_joints)
+  # joint_vel:       [num_joints, 2*num_joints)
+  # pelvis_quat_b:   [2*num_joints, 2*num_joints+4)
+  # pelvis_lin_vel_b:[2*num_joints+4, 2*num_joints+7)
+  # pelvis_ang_vel_b:[2*num_joints+7, 2*num_joints+10)
+  groups:
+    - name: "joint_pos"
+    - name: "joint_vel"
+    - name: "pelvis_quat_b"
+    - name: "pelvis_lin_vel_b"
+    - name: "pelvis_ang_vel_b"
+
+# --- 滑窗 ---
+window_size: 10
+stride: 1
+
+# --- 模型 ---
+model:
+  encoder_hidden_dims: [4096, 2048, 1024, 512, 256]
+  decoder_hidden_dims: [4096, 2048, 1024, 512, 256]
+  ifsq_levels: [64, 64, 64, 64, 64, 64, 64, 64]  # latent_dim = len(ifsq_levels) = 8
+  activation: "relu"
+  use_layer_norm: true
+
+# --- 训练 ---
+training:
+  batch_size: 512
+  learning_rate: 1.0e-3
+  weight_decay: 1.0e-5
+  num_epochs: 10000
+  num_workers: 4
+  seed: 42
+  save_every: 100            # 每 N epoch 保存一次 checkpoint
+  output_root: "outputs"
+  experiment_name: "motion_ae"
+  run_name: ""
+  device: "auto"
+
+# --- 日志 / 追踪 ---
+logger:
+  logger: "wandb"
+  log_project_name: "motion_ae"
+  wandb_entity: null
+  wandb_mode: "online"
+  wandb_tags: []
+  wandb_notes: ""
+  save_code: false
+
+# --- 损失 ---
+loss:
+  type: "mse"
+  # 分组权重（默认全部为 1.0，后续可按需调整）
+  group_weights:
+    joint_pos: 1.0
+    joint_vel: 1.0
+    pelvis_quat_b: 1.0
+    pelvis_lin_vel_b: 1.0
+    pelvis_ang_vel_b: 1.0
+
+# --- 归一化 ---
+normalization:
+  eps: 1.0e-6              # std 下限保护
+  stats_file: "stats.npz"
+
+# --- 调试 ---
+debug: false
