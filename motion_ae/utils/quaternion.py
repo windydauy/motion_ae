@@ -57,6 +57,26 @@ def quat_apply(q: np.ndarray, v: np.ndarray) -> np.ndarray:
     return v + q[..., 0:1] * t + np.cross(q_xyz, t)
 
 
+def quat_to_rot6d(q: np.ndarray) -> np.ndarray:
+    """将单位四元数转换为 6D 旋转表示。
+
+    6D 表示使用旋转矩阵的前两列按列拼接：
+    [R00, R10, R20, R01, R11, R21]。
+    """
+    q = q / np.clip(np.linalg.norm(q, axis=-1, keepdims=True), 1e-12, None)
+    w, x, y, z = q[..., 0], q[..., 1], q[..., 2], q[..., 3]
+
+    r00 = 1.0 - 2.0 * (y * y + z * z)
+    r10 = 2.0 * (x * y + z * w)
+    r20 = 2.0 * (x * z - y * w)
+
+    r01 = 2.0 * (x * y - z * w)
+    r11 = 1.0 - 2.0 * (x * x + z * z)
+    r21 = 2.0 * (y * z + x * w)
+
+    return np.stack([r00, r10, r20, r01, r11, r21], axis=-1)
+
+
 def yaw_quat(q: np.ndarray) -> np.ndarray:
     """从四元数中提取 yaw 分量，返回仅包含 yaw 旋转的四元数。
 

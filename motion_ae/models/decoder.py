@@ -25,7 +25,7 @@ class MLPDecoder(nn.Module):
         self.latent_dim = latent_dim
         self.output_dim = output_dim
 
-        act_cls = {"relu": nn.ReLU, "elu": nn.ELU, "gelu": nn.GELU}[activation]
+        act_cls = {"relu": nn.ReLU, "elu": nn.ELU, "gelu": nn.GELU, "silu": nn.SiLU}[activation]
         layers: list[nn.Module] = []
         prev = latent_dim
         for h in hidden_dims:

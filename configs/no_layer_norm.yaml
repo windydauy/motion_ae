@@ -4,8 +4,8 @@
 
 # --- 数据 ---
 data:
-  # 支持单个 npz 路径或包含 motion.npz 的根目录
-  data_path: "/home/humanoid/yzh/TextOp/motion_ae/converted_1031/"
+  # 支持单个 npz 路径或包含 motion.npz 的根目录 /home/humanoid/yzh/TextOp/trip_npz_filtered/optitrack_data/BOXING_WALK/
+  data_path: "/home/humanoid/yzh/TextOp/trip_npz_filtered/optitrack_data/BOXING_WALK/" # /home/humanoid/yzh/TextOp/motion_ae/converted_1031/
   npz_filename: "motion.npz"
   val_ratio: 0.2          # 按文件级别划分验证集比例
 
@@ -28,37 +28,38 @@ feature:
   # 各特征组及其在最终特征向量中的维度范围（自动计算，此处仅做参考）
   # joint_pos:       [0, num_joints)
   # joint_vel:       [num_joints, 2*num_joints)
-  # pelvis_quat_b:   [2*num_joints, 2*num_joints+4)
-  # pelvis_lin_vel_b:[2*num_joints+4, 2*num_joints+7)
-  # pelvis_ang_vel_b:[2*num_joints+7, 2*num_joints+10)
+  # pelvis_rot6d_b:  [2*num_joints, 2*num_joints+6)
+  # pelvis_lin_vel_b:[2*num_joints+6, 2*num_joints+9)
+  # pelvis_ang_vel_b:[2*num_joints+9, 2*num_joints+12)
   groups:
     - name: "joint_pos"
     - name: "joint_vel"
-    - name: "pelvis_quat_b"
+    - name: "pelvis_rot6d_b"
     - name: "pelvis_lin_vel_b"
     - name: "pelvis_ang_vel_b"
 
 # --- 滑窗 ---
-window_size: 10
-stride: 1
+window_size: 20
+stride: 4
 
 # --- 模型 ---
 model:
-  encoder_hidden_dims: [4096, 2048, 1024, 512, 256]
-  decoder_hidden_dims: [4096, 2048, 1024, 512, 256]
-  ifsq_levels: [64, 64, 64, 64, 64, 64, 64, 64]  # latent_dim = len(ifsq_levels) = 64
-  activation: "relu"
+  encoder_hidden_dims: [2048, 1024, 512, 512]
+  decoder_hidden_dims: [2048, 1024, 512, 512]
+  ifsq_levels: [32, 32, 32, 32, 32, 32, 32, 32, 32, 32, 32, 32, 32, 32, 32, 32, 32, 32, 32, 32, 32, 32, 32, 32, 32, 32, 32, 32, 32, 32, 32, 32]
+
+  activation: "silu"
   use_layer_norm: false
 
 # --- 训练 ---
 training:
-  batch_size: 512
+  batch_size: 1024
   learning_rate: 1.0e-3
   weight_decay: 1.0e-5
-  num_epochs: 10000
+  num_epochs: 30000
   num_workers: 4
   seed: 42
-  save_every: 100            # 每 N epoch 保存一次 checkpoint
+  save_every: 500            # 每 N epoch 保存一次 checkpoint
   output_root: "outputs"
   experiment_name: "motion_ae"
   run_name: ""
@@ -81,7 +82,7 @@ loss:
   group_weights:
     joint_pos: 1.0
     joint_vel: 1.0
-    pelvis_quat_b: 1.0
+    pelvis_rot6d_b: 1.0
     pelvis_lin_vel_b: 1.0
     pelvis_ang_vel_b: 1.0
 

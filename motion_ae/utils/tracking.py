@@ -1,6 +1,9 @@
 """实验追踪工具，当前主要提供 wandb 集成。"""
 from __future__ import annotations
 
+import json
+import os
+import subprocess
 from typing import Any, Dict, Optional
 
 from motion_ae.config import MotionAEConfig, config_to_dict
@@ -23,6 +26,59 @@ class NullTracker:
 
     def update_summary(self, metrics: Dict[str, Any]) -> None:
         return None
+
+
+def _run_git_command(args: list[str], cwd: str) -> str:
+    """运行 git 命令并返回 stdout。失败时返回错误摘要而不是抛异常。"""
+    try:
+        result = subprocess.run(
+            args,
+            cwd=cwd,
+            check=True,
+            capture_output=True,
+            text=True,
+        )
+    except Exception as exc:
+        return f"[git command failed] {' '.join(args)}\n{exc}\n"
+    return result.stdout
+
+
+def _save_git_state(run_dir: str) -> Dict[str, str]:
+    """保存当前仓库的 diff / staged diff / meta 到 run artifacts 目录。"""
+    artifacts_dir = os.path.join(run_dir, "artifacts")
+    os.makedirs(artifacts_dir, exist_ok=True)
+
+    diff_path = os.path.join(artifacts_dir, "git_diff.patch")
+    staged_path = os.path.join(artifacts_dir, "git_diff_staged.patch")
+    meta_path = os.path.join(artifacts_dir, "git_meta.json")
+
+    diff_text = _run_git_command(["git", "diff", "--", "."], cwd=run_dir)
+    staged_text = _run_git_command(["git", "diff", "--cached", "--", "."], cwd=run_dir)
+    head = _run_git_command(["git", "rev-parse", "HEAD"], cwd=run_dir).strip()
+    branch = _run_git_command(["git", "rev-parse", "--abbrev-ref", "HEAD"], cwd=run_dir).strip()
+    status_short = _run_git_command(["git", "status", "--short"], cwd=run_dir).strip()
+
+    with open(diff_path, "w", encoding="utf-8") as f:
+        f.write(diff_text)
+    with open(staged_path, "w", encoding="utf-8") as f:
+        f.write(staged_text)
+    with open(meta_path, "w", encoding="utf-8") as f:
+        json.dump(
+            {
+                "head": head,
+                "branch": branch,
+                "status_short": status_short,
+            },
+            f,
+            indent=2,
+            ensure_ascii=False,
+        )
+
+    return {
+        "git_diff": diff_path,
+        "git_diff_staged": staged_path,
+        "git_meta": meta_path,
+    }
 
 
 class WandbTracker:
@@ -58,6 +114,9 @@ class WandbTracker:
             resume="allow" if resume else None,
             save_code=cfg.logger.save_code,
         )
+        self.git_artifacts = _save_git_state(run_dir)
+        for path in self.git_artifacts.values():
+            self._wandb.save(path, base_path=run_dir, policy="now")
 
     def log(self, metrics: Dict[str, Any], step: Optional[int] = None) -> None:
         self._wandb.log(metrics, step=step)

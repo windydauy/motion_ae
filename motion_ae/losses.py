@@ -27,6 +27,10 @@ class ReconstructionLoss(nn.Module):
         super().__init__()
         self.group_slices = group_slices
         self.group_weights = group_weights or {k: 1.0 for k in group_slices}
+        unknown_groups = set(self.group_weights) - set(self.group_slices)
+        if unknown_groups:
+            names = ", ".join(sorted(unknown_groups))
+            raise ValueError(f"group_weights contains unknown feature groups: {names}")
 
     def forward(
         self, pred: torch.Tensor, target: torch.Tensor

@@ -52,7 +52,7 @@ def test_train_smoke():
         ds_norm = MotionWindowDataset([npz_path], cfg, normalizer=normalizer)
 
         D = ds_norm.slices.total_dim
-        assert D == 68
+        assert D == 70
 
         loader = DataLoader(ds_norm, batch_size=4, shuffle=True)
         model = MotionAutoEncoder(

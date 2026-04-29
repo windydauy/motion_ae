@@ -29,11 +29,12 @@
 
 1. `joint_pos`
 2. `joint_vel`
-3. `pelvis_quat_b`
+3. `pelvis_rot6d_b`
 4. `pelvis_lin_vel_b`
 5. `pelvis_ang_vel_b`
 
 这里的 `pelvis_*_b` 不是直接从 NPZ 里读出的 body frame 数据，而是由世界坐标系量通过 yaw-only anchor frame 变换得到。实现位于 [motion_ae/feature_builder.py](/home/humanoid/yzh/TextOp/motion_ae/motion_ae/feature_builder.py:1)。
+`pelvis_rot6d_b` 使用旋转矩阵前两列拼接的 6D 表示。
 
 默认约定：
 

@@ -7,7 +7,7 @@ from motion_ae.models.decoder import MLPDecoder
 from motion_ae.models.autoencoder import MotionAutoEncoder
 
 
-D = 68
+D = 70
 W = 10
 FLAT = W * D
 LATENT = 8

@@ -79,7 +79,7 @@ class LossConfig:
         default_factory=lambda: {
             "joint_pos": 1.0,
             "joint_vel": 1.0,
-            "pelvis_quat_b": 1.0,
+            "pelvis_rot6d_b": 1.0,
             "pelvis_lin_vel_b": 1.0,
             "pelvis_ang_vel_b": 1.0,
         }

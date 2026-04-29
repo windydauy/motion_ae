@@ -17,13 +17,13 @@ from scripts.debug_plain_ae_overfit import (
 
 def test_plain_autoencoder_forward_shape():
     model = PlainMotionAutoEncoder(
-        feature_dim=68,
+        feature_dim=70,
         window_size=10,
         encoder_hidden_dims=[64],
         decoder_hidden_dims=[64],
         latent_dim=4,
     )
-    x = torch.randn(3, 10, 68)
+    x = torch.randn(3, 10, 70)
 
     x_hat, info = model(x)
 
@@ -33,9 +33,9 @@ def test_plain_autoencoder_forward_shape():
 
 def test_overfit_single_batch_reduces_loss():
     torch.manual_seed(0)
-    batch = torch.randn(16, 10, 68)
+    batch = torch.randn(16, 10, 70)
     model = PlainMotionAutoEncoder(
-        feature_dim=68,
+        feature_dim=70,
         window_size=10,
         encoder_hidden_dims=[128],
         decoder_hidden_dims=[128],
@@ -45,9 +45,9 @@ def test_overfit_single_batch_reduces_loss():
         group_slices={
             "joint_pos": (0, 29),
             "joint_vel": (29, 58),
-            "pelvis_quat_b": (58, 62),
-            "pelvis_lin_vel_b": (62, 65),
-            "pelvis_ang_vel_b": (65, 68),
+            "pelvis_rot6d_b": (58, 64),
+            "pelvis_lin_vel_b": (64, 67),
+            "pelvis_ang_vel_b": (67, 70),
         }
     )
     optimizer = torch.optim.Adam(model.parameters(), lr=1e-3)
@@ -67,25 +67,25 @@ def test_overfit_single_batch_reduces_loss():
 
 def test_compare_models_on_batch_returns_both_histories(tmp_path):
     torch.manual_seed(0)
-    batch = torch.randn(8, 10, 68)
+    batch = torch.randn(8, 10, 70)
     criterion = ReconstructionLoss(
         group_slices={
             "joint_pos": (0, 29),
             "joint_vel": (29, 58),
-            "pelvis_quat_b": (58, 62),
-            "pelvis_lin_vel_b": (62, 65),
-            "pelvis_ang_vel_b": (65, 68),
+            "pelvis_rot6d_b": (58, 64),
+            "pelvis_lin_vel_b": (64, 67),
+            "pelvis_ang_vel_b": (67, 70),
         }
     )
     plain_model = PlainMotionAutoEncoder(
-        feature_dim=68,
+        feature_dim=70,
         window_size=10,
         encoder_hidden_dims=[64],
         decoder_hidden_dims=[64],
         latent_dim=8,
     )
     ifsq_model = MotionAutoEncoder(
-        feature_dim=68,
+        feature_dim=70,
         window_size=10,
         encoder_hidden_dims=[64],
         decoder_hidden_dims=[64],

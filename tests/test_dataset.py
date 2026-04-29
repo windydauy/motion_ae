@@ -57,9 +57,9 @@ class TestBuildFeatures:
 
         assert feats.ndim == 2
         assert feats.shape[0] == 50  # T
-        # D = 29 + 29 + 4 + 3 + 3 = 68
-        assert feats.shape[1] == 68
-        assert slices.total_dim == 68
+        # D = 29 + 29 + 6 + 3 + 3 = 70
+        assert feats.shape[1] == 70
+        assert slices.total_dim == 70
 
     def test_debug_mode(self, fake_npz_dir):
         path = os.path.join(fake_npz_dir, "clip1", "motion.npz")
@@ -67,7 +67,35 @@ class TestBuildFeatures:
         keys = NpzKeysConfig()
         pelvis_cfg = PelvisConfig()
         feats, slices = build_features(data, keys, pelvis_cfg, debug=True)
-        assert feats.shape[1] == 68
+        assert feats.shape[1] == 70
+
+    def test_pelvis_rot6d_b_uses_rotation_6d(self):
+        data = {
+            "joint_pos": np.zeros((2, 29), dtype=np.float32),
+            "joint_vel": np.zeros((2, 29), dtype=np.float32),
+            "body_pos_w": np.zeros((2, 1, 3), dtype=np.float32),
+            "body_quat_w": np.array(
+                [
+                    [[1.0, 0.0, 0.0, 0.0]],
+                    [[-1.0, 0.0, 0.0, 0.0]],
+                ],
+                dtype=np.float32,
+            ),
+            "body_lin_vel_w": np.zeros((2, 1, 3), dtype=np.float32),
+            "body_ang_vel_w": np.zeros((2, 1, 3), dtype=np.float32),
+            "fps": np.array([30]),
+        }
+
+        feats, slices = build_features(data, NpzKeysConfig(), PelvisConfig(body_index=0))
+        start, end = slices.pelvis_rot6d_b
+
+        assert end - start == 6
+        expected_identity_6d = np.array([1.0, 0.0, 0.0, 0.0, 1.0, 0.0], dtype=np.float32)
+        np.testing.assert_allclose(
+            feats[:, start:end],
+            np.tile(expected_identity_6d, (2, 1)),
+            atol=1e-6,
+        )
 
 
 class TestMotionWindowDataset:
@@ -84,7 +112,7 @@ class TestMotionWindowDataset:
         ds = MotionWindowDataset([path], cfg)
         sample = ds[0]
         assert isinstance(sample, torch.Tensor)
-        assert sample.shape == (10, 68)
+        assert sample.shape == (10, 70)
 
     def test_stride(self, fake_npz_dir):
         cfg = _make_config(fake_npz_dir)

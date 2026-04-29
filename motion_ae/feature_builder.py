@@ -1,9 +1,10 @@
 """从 npz 数据构建单帧特征向量。
 
 特征拼接顺序：
-    [joint_pos | joint_vel | pelvis_quat_b | pelvis_lin_vel_b | pelvis_ang_vel_b]
+    [joint_pos | joint_vel | pelvis_rot6d_b | pelvis_lin_vel_b | pelvis_ang_vel_b]
 
 其中 pelvis_* 是从世界坐标系转换到 anchor（yaw-only）坐标系后的值。
+pelvis_rot6d_b 是旋转矩阵前两列拼接的 6D 表示。
 
 ⚠️  如果你的 npz 四元数格式不是 (w, x, y, z)，请在下面的
     `_ensure_wxyz` 函数中修改。
@@ -16,7 +17,7 @@ from typing import Dict, Optional, Tuple
 import numpy as np
 
 from motion_ae.config import NpzKeysConfig, PelvisConfig
-from motion_ae.utils.quaternion import quat_apply, quat_conjugate, yaw_quat
+from motion_ae.utils.quaternion import quat_apply, quat_conjugate, quat_to_rot6d, yaw_quat
 
 
 # ------------------------------------------------------------------
@@ -28,7 +29,7 @@ class FeatureSlices:
     """记录各特征组在最终特征向量中的 [start, end) 切片。"""
     joint_pos: Tuple[int, int] = (0, 0)
     joint_vel: Tuple[int, int] = (0, 0)
-    pelvis_quat_b: Tuple[int, int] = (0, 0)
+    pelvis_rot6d_b: Tuple[int, int] = (0, 0)
     pelvis_lin_vel_b: Tuple[int, int] = (0, 0)
     pelvis_ang_vel_b: Tuple[int, int] = (0, 0)
 
@@ -36,7 +37,7 @@ class FeatureSlices:
         return {
             "joint_pos": self.joint_pos,
             "joint_vel": self.joint_vel,
-            "pelvis_quat_b": self.pelvis_quat_b,
+            "pelvis_rot6d_b": self.pelvis_rot6d_b,
             "pelvis_lin_vel_b": self.pelvis_lin_vel_b,
             "pelvis_ang_vel_b": self.pelvis_ang_vel_b,
         }
@@ -107,17 +108,17 @@ def world_to_anchor(
         pelvis_ang_vel_w:  (T, 3) 世界系角速度
 
     Returns:
-        (pelvis_quat_b, pelvis_lin_vel_b, pelvis_ang_vel_b)
+        (pelvis_quat_anchor_b, pelvis_lin_vel_b, pelvis_ang_vel_b)
     """
     anchor_yaw = yaw_quat(pelvis_quat_w)                         # (T, 4)
     anchor_yaw_inv = quat_conjugate(anchor_yaw)                   # (T, 4)
 
     from motion_ae.utils.quaternion import quat_mul
-    pelvis_quat_b = quat_mul(anchor_yaw_inv, pelvis_quat_w)      # (T, 4)
+    pelvis_quat_anchor_b = quat_mul(anchor_yaw_inv, pelvis_quat_w)  # (T, 4)
     pelvis_lin_vel_b = quat_apply(anchor_yaw_inv, pelvis_lin_vel_w)  # (T, 3)
     pelvis_ang_vel_b = quat_apply(anchor_yaw_inv, pelvis_ang_vel_w)  # (T, 3)
 
-    return pelvis_quat_b, pelvis_lin_vel_b, pelvis_ang_vel_b
+    return pelvis_quat_anchor_b, pelvis_lin_vel_b, pelvis_ang_vel_b
 
 
 # ------------------------------------------------------------------
@@ -154,24 +155,24 @@ def build_features(
     pelvis_quat_w, pelvis_lin_vel_w, pelvis_ang_vel_w = extract_pelvis_data(
         npz_data, keys, pelvis_cfg
     )
-    pelvis_quat_b, pelvis_lin_vel_b, pelvis_ang_vel_b = world_to_anchor(
+    pelvis_quat_anchor_b, pelvis_lin_vel_b, pelvis_ang_vel_b = world_to_anchor(
         pelvis_quat_w, pelvis_lin_vel_w, pelvis_ang_vel_w
     )
 
-    pelvis_quat_b = pelvis_quat_b.astype(np.float32)
+    pelvis_rot6d_b = quat_to_rot6d(pelvis_quat_anchor_b).astype(np.float32)
     pelvis_lin_vel_b = pelvis_lin_vel_b.astype(np.float32)
     pelvis_ang_vel_b = pelvis_ang_vel_b.astype(np.float32)
 
     assert joint_pos.shape[0] == T
     assert joint_vel.shape[0] == T
-    assert pelvis_quat_b.shape == (T, 4)
+    assert pelvis_rot6d_b.shape == (T, 6)
     assert pelvis_lin_vel_b.shape == (T, 3)
     assert pelvis_ang_vel_b.shape == (T, 3)
 
     features = np.concatenate([
         joint_pos,           # (T, J)
         joint_vel,           # (T, J)
-        pelvis_quat_b,      # (T, 4)
+        pelvis_rot6d_b,      # (T, 6)
         pelvis_lin_vel_b,    # (T, 3)
         pelvis_ang_vel_b,    # (T, 3)
     ], axis=-1)              # (T, D)
@@ -181,7 +182,7 @@ def build_features(
     s = FeatureSlices()
     s.joint_pos = (offset, offset + J);            offset += J
     s.joint_vel = (offset, offset + J);            offset += J
-    s.pelvis_quat_b = (offset, offset + 4);        offset += 4
+    s.pelvis_rot6d_b = (offset, offset + 6);       offset += 6
     s.pelvis_lin_vel_b = (offset, offset + 3);     offset += 3
     s.pelvis_ang_vel_b = (offset, offset + 3);     offset += 3
 

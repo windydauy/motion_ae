@@ -2,6 +2,7 @@
 from __future__ import annotations
 
 import os
+import json
 import sys
 import tempfile
 import types
@@ -33,7 +34,7 @@ def _make_fake_npz(path: str, seed: int, T: int = 32):
 
 
 def test_wandb_tracker_lifecycle(monkeypatch):
-    calls = {"init": None, "log": [], "finish": 0, "watch": 0}
+    calls = {"init": None, "log": [], "finish": 0, "watch": 0, "save": []}
 
     class FakeRun:
         def __init__(self):
@@ -56,21 +57,55 @@ def test_wandb_tracker_lifecycle(monkeypatch):
     def fake_finish():
         calls["finish"] += 1
 
+    def fake_save(path, base_path=None, policy=None):
+        calls["save"].append((path, base_path, policy))
+
     fake_wandb.init = fake_init
     fake_wandb.log = fake_log
     fake_wandb.watch = fake_watch
     fake_wandb.finish = fake_finish
+    fake_wandb.save = fake_save
 
     monkeypatch.setitem(sys.modules, "wandb", fake_wandb)
+
+    def fake_run_git_command(_args, cwd):
+        if _args[:2] == ["git", "diff"] and "--cached" not in _args:
+            return "diff --git a/file.py b/file.py\n+print('worktree')\n"
+        if _args[:3] == ["git", "diff", "--cached"]:
+            return "diff --git a/file.py b/file.py\n+print('staged')\n"
+        if _args[:3] == ["git", "rev-parse", "HEAD"]:
+            return "abc123def\n"
+        if _args[:4] == ["git", "rev-parse", "--abbrev-ref", "HEAD"]:
+            return "main\n"
+        if _args[:2] == ["git", "status"]:
+            return " M file.py\n"
+        raise AssertionError(f"Unexpected git command: {_args}")
+
+    monkeypatch.setattr("motion_ae.utils.tracking._run_git_command", fake_run_git_command)
 
     cfg = MotionAEConfig()
     cfg.logger.logger = "wandb"
     cfg.logger.log_project_name = "motion_ae_test"
-    tracker = build_tracker(cfg, run_dir="/tmp/run", run_name="demo_run", job_type="train")
-    tracker.watch(object())
-    tracker.log({"train/loss": 1.0}, step=3)
-    tracker.update_summary({"best_val_loss": 0.25})
-    tracker.finish()
+    with tempfile.TemporaryDirectory() as tmpdir:
+        tracker = build_tracker(cfg, run_dir=tmpdir, run_name="demo_run", job_type="train")
+        tracker.watch(object())
+        tracker.log({"train/loss": 1.0}, step=3)
+        tracker.update_summary({"best_val_loss": 0.25})
+        tracker.finish()
+
+        artifacts_dir = os.path.join(tmpdir, "artifacts")
+        diff_path = os.path.join(artifacts_dir, "git_diff.patch")
+        staged_path = os.path.join(artifacts_dir, "git_diff_staged.patch")
+        meta_path = os.path.join(artifacts_dir, "git_meta.json")
+        assert os.path.exists(diff_path)
+        assert os.path.exists(staged_path)
+        assert os.path.exists(meta_path)
+        assert "worktree" in open(diff_path, "r", encoding="utf-8").read()
+        assert "staged" in open(staged_path, "r", encoding="utf-8").read()
+        meta = json.load(open(meta_path, "r", encoding="utf-8"))
+        assert meta["head"] == "abc123def"
+        assert meta["branch"] == "main"
+        assert meta["status_short"] == "M file.py"
 
     assert calls["init"]["project"] == "motion_ae_test"
     assert calls["init"]["name"] == "demo_run"
@@ -79,6 +114,11 @@ def test_wandb_tracker_lifecycle(monkeypatch):
     assert calls["watch"] == 1
     assert calls["finish"] == 1
     assert fake_run.summary["best_val_loss"] == 0.25
+    assert [os.path.basename(path) for path, _base_path, _policy in calls["save"]] == [
+        "git_diff.patch",
+        "git_diff_staged.patch",
+        "git_meta.json",
+    ]
 
 
 def test_evaluate_script_from_run_dir(monkeypatch):

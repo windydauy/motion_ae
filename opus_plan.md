@@ -33,7 +33,8 @@
 ```python
 anchor_yaw_quat = yaw_quat(pelvis_quat_w)
 
-pelvis_quat_b = quat_mul(quat_inv(anchor_yaw_quat), pelvis_quat_w)
+pelvis_quat_anchor_b = quat_mul(quat_inv(anchor_yaw_quat), pelvis_quat_w)
+pelvis_rot6d_b = quat_to_rot6d(pelvis_quat_anchor_b)
 pelvis_lin_vel_b = quat_apply(quat_inv(anchor_yaw_quat), pelvis_lin_vel_w)
 pelvis_ang_vel_b = quat_apply(quat_inv(anchor_yaw_quat), pelvis_ang_vel_w)
 ```
@@ -48,10 +49,10 @@ pelvis_ang_vel_b = quat_apply(quat_inv(anchor_yaw_quat), pelvis_ang_vel_w)
 |---|---|
 | `joint_pos` | 29 |
 | `joint_vel` | 29 |
-| `pelvis_quat_b` | 4 |
+| `pelvis_rot6d_b` | 6 |
 | `pelvis_lin_vel_b` | 3 |
 | `pelvis_ang_vel_b` | 3 |
-| **总计** | **68** |
+| **总计** | **70** |
 
 ---
 
@@ -81,12 +82,12 @@ z_d = \text{round}\left(\frac{L-1}{2}(f(z_c)+1)\right), \quad f(x)=2\sigma(1.6x)
 ### 四、模型架构设计
 
 ```
-Input: [B, 10, 68]
+Input: [B, 10, 70]
        ↓ flatten
-     [B, 680]
+     [B, 700]
        ↓
   ┌─ MLP Encoder ─┐
-  │ 680 → 512 → 256 → latent_dim │
+  │ 700 → 512 → 256 → latent_dim │
   └────────────────┘
        ↓
   ┌─── iFSQ ────┐
@@ -94,10 +95,10 @@ Input: [B, 10, 68]
   └──────────────┘
        ↓
   ┌─ MLP Decoder ─┐
-  │ latent_dim → 256 → 512 → 680 │
+  │ latent_dim → 256 → 512 → 700 │
   └────────────────┘
        ↓ reshape
-Output: [B, 10, 68]
+Output: [B, 10, 70]
 ```
 
 **默认超参数**：
@@ -143,9 +144,9 @@ Output: [B, 10, 68]
 |---|---|---|
 | `joint_pos` | `[0:29]` | 关节位置 MSE |
 | `joint_vel` | `[29:58]` | 关节速度 MSE |
-| `pelvis_quat_b` | `[58:62]` | 骨盆朝向 MSE |
-| `pelvis_lin_vel_b` | `[62:65]` | 骨盆线速度 MSE |
-| `pelvis_ang_vel_b` | `[65:68]` | 骨盆角速度 MSE |
+| `pelvis_rot6d_b` | `[58:64]` | 骨盆朝向 MSE |
+| `pelvis_lin_vel_b` | `[64:67]` | 骨盆线速度 MSE |
+| `pelvis_ang_vel_b` | `[67:70]` | 骨盆角速度 MSE |
 
 **推理输出**（保存为 npz）：
 - 原始窗口 `original`
@@ -204,13 +205,13 @@ motion_ae/
 
 1. **Pelvis = body[0]**：默认取 `body_*_w[:, 0, :]` 作为 pelvis，如果你的数据里 pelvis 不是第一个 body，需要改配置中的 `pelvis_body_index`。
 
-2. **Anchor frame 的定义**：我计划用 **yaw-only** 的 pelvis 朝向作为 anchor。这意味着 `pelvis_quat_b` 保留了 pitch/roll 信息但去除了 yaw（航向角），lin_vel/ang_vel 在航向对齐的局部坐标系下表达。这与参考代码的做法一致。
+2. **Anchor frame 的定义**：我计划用 **yaw-only** 的 pelvis 朝向作为 anchor。这意味着 `pelvis_rot6d_b` 表达去除 yaw 后的 pelvis 朝向，lin_vel/ang_vel 在航向对齐的局部坐标系下表达。这与参考代码的做法一致。
 
 3. **joint_pos 的含义**：npz 中 `joint_pos` shape 为 `(T, 29)`，看起来已经是关节角度（1D per joint），而不是 3D 位置。如果实际是 3D 坐标需要调整。
 
 4. **不包含 `body_pos_w`**：根据需求说明，单帧特征中不包含 pelvis 的世界位置（因为在 anchor frame 下位置为零），如果需要添加 pelvis 的高度或相对位移，可后续扩展。
 
-5. **iFSQ levels 的选择**：默认 `[8]*8` 给出 `8^8 ≈ 1.6M` 的编码本，这对于 68 维输入可能过大或过小。你可以根据实验调整，例如 `[5]*4` → 625 个 code，或 `[8]*6` → 262K。
+5. **iFSQ levels 的选择**：默认 `[8]*8` 给出 `8^8 ≈ 1.6M` 的编码本，这对于 70 维输入可能过大或过小。你可以根据实验调整，例如 `[5]*4` → 625 个 code，或 `[8]*6` → 262K。
 
 ---
 
