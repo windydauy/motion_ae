@@ -57,6 +57,8 @@ training:
   weight_decay: 1.0e-5
   num_epochs: 10000
   num_workers: 4
+  preload_to_gpu: false   # true 时整块数据上 GPU（显存不足则自动回退 CPU）
+  dataset_cache: true      # 缓存打包后的窗口数据，后续同配置直接加载
   seed: 42
   save_every: 100            # 每 N epoch 保存一次 checkpoint
   output_root: "outputs"

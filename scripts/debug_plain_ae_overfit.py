@@ -17,7 +17,7 @@ if PROJECT_ROOT not in sys.path:
     sys.path.insert(0, PROJECT_ROOT)
 
 from motion_ae.config import load_config
-from motion_ae.dataset import build_datasets
+from motion_ae.dataset import build_datasets, dataloader_io_options, try_preload_one_dataset
 from motion_ae.losses import ReconstructionLoss
 from motion_ae.models.autoencoder import MotionAutoEncoder
 from motion_ae.models.plain_autoencoder import PlainMotionAutoEncoder
@@ -223,6 +223,8 @@ def main() -> None:
 
     train_ds, val_ds, _normalizer, feature_slices = build_datasets(cfg)
     dataset = train_ds if args.split == "train" else val_ds
+    data_on_gpu = try_preload_one_dataset(dataset, device, cfg.training.preload_to_gpu)
+    nw, pm = dataloader_io_options(device, data_on_gpu, cfg.training.num_workers)
     print(
         f"[compare-overfit] split={args.split} windows={len(dataset)} "
         f"batch_size={cfg.training.batch_size} feature_dim={feature_slices.total_dim}"
@@ -232,8 +234,8 @@ def main() -> None:
         dataset,
         batch_size=cfg.training.batch_size,
         shuffle=False,
-        num_workers=cfg.training.num_workers,
-        pin_memory=device.type == "cuda",
+        num_workers=nw,
+        pin_memory=pm,
         drop_last=False,
     )
     fixed_batch = get_fixed_batch(loader, args.batch_index)

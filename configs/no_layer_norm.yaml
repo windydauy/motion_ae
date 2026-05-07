@@ -5,7 +5,7 @@
 # --- 数据 ---
 data:
   # 支持单个 npz 路径或包含 motion.npz 的根目录 /home/humanoid/yzh/TextOp/trip_npz_filtered/optitrack_data/BOXING_WALK/
-  data_path: "/home/humanoid/yzh/TextOp/trip_npz_filtered/optitrack_data/BOXING_WALK/" # /home/humanoid/yzh/TextOp/motion_ae/converted_1031/
+  data_path: "/pfs/pfs-ilWc5D/yzh/g1_soma/npz_part" # /home/humanoid/yzh/TextOp/motion_ae/converted_1031/
   npz_filename: "motion.npz"
   val_ratio: 0.2          # 按文件级别划分验证集比例
 
@@ -53,17 +53,19 @@ model:
 
 # --- 训练 ---
 training:
-  batch_size: 1024
+  batch_size: 2048
   learning_rate: 1.0e-3
   weight_decay: 1.0e-5
   num_epochs: 30000
-  num_workers: 4
+  num_workers: 16
+  preload_to_gpu: true
+  dataset_cache: true
   seed: 42
-  save_every: 500            # 每 N epoch 保存一次 checkpoint
+  save_every: 1000            # 每 N epoch 保存一次 checkpoint
   output_root: "outputs"
   experiment_name: "motion_ae"
   run_name: ""
-  device: "auto"
+  device: "cuda:1"
 
 # --- 日志 / 追踪 ---
 logger:

@@ -2,7 +2,7 @@
 # 训练入口：在项目根目录下调用 scripts/train.py
 #
 # 用法示例（先 conda activate text_tracker）：
-#   ./scripts/train.sh --config configs/default.yaml --experiment_name motion_ae --run_name demo
+#   ./scripts/train.sh --config configs/no_layer_norm.yaml --experiment_name motion_ae --run_name no_layer_norm
 #
 # 恢复训练：
 #   ./scripts/train.sh --config configs/default.yaml --resume --load_run 2026-04-14_12-00-00_demo --checkpoint last_checkpoint.pt

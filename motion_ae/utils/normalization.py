@@ -1,7 +1,6 @@
 """特征归一化：统计 mean/std，保存/加载，归一化/反归一化。"""
 from __future__ import annotations
 
-import os
 from typing import Optional
 
 import numpy as np
@@ -49,7 +48,7 @@ class FeatureNormalizer:
 
 
 def compute_stats(features_list: list[np.ndarray]) -> tuple[np.ndarray, np.ndarray]:
-    """从多个 (T, D) 特征数组中计算全局 mean 和 std。
+    """从多个 (T, D) 特征数组中流式计算全局 mean 和 std。
 
     Args:
         features_list: 每个元素 shape = (T_i, D)
@@ -57,7 +56,34 @@ def compute_stats(features_list: list[np.ndarray]) -> tuple[np.ndarray, np.ndarr
     Returns:
         (mean, std)  各 shape = (D,)
     """
-    all_feats = np.concatenate(features_list, axis=0)  # (N_total, D)
-    mean = all_feats.mean(axis=0)
-    std = all_feats.std(axis=0)
-    return mean, std
+    if not features_list:
+        raise ValueError("features_list is empty")
+
+    total_count = 0
+    sum_: Optional[np.ndarray] = None
+    sumsq: Optional[np.ndarray] = None
+
+    for feats in features_list:
+        if feats.ndim != 2:
+            raise ValueError(f"Expected 2D features, got shape {feats.shape}")
+        if feats.shape[0] == 0:
+            continue
+
+        if sum_ is None:
+            dim = feats.shape[1]
+            sum_ = np.zeros(dim, dtype=np.float64)
+            sumsq = np.zeros(dim, dtype=np.float64)
+        elif feats.shape[1] != sum_.shape[0]:
+            raise ValueError(f"Feature dim mismatch: {feats.shape[1]} vs {sum_.shape[0]}")
+
+        total_count += int(feats.shape[0])
+        sum_ += feats.sum(axis=0, dtype=np.float64)
+        sumsq += np.square(feats, dtype=np.float64).sum(axis=0, dtype=np.float64)
+
+    if total_count == 0 or sum_ is None or sumsq is None:
+        raise ValueError("No frames available for stats")
+
+    mean = sum_ / total_count
+    var = np.maximum(sumsq / total_count - mean * mean, 0.0)
+    std = np.sqrt(var)
+    return mean.astype(np.float32), std.astype(np.float32)

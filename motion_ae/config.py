@@ -53,6 +53,10 @@ class TrainingConfig:
     weight_decay: float = 1e-5
     num_epochs: int = 100
     num_workers: int = 4
+    # 将归一化后的整块 (N,W,D) 张量预载到 GPU；显存不足时自动回退 CPU。
+    preload_to_gpu: bool = False
+    # 缓存解析/归一化/打包后的 train/val 窗口，后续同配置直接复用。
+    dataset_cache: bool = True
     seed: int = 42
     save_every: int = 5
     output_root: str = "outputs"

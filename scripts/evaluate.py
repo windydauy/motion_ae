@@ -12,7 +12,7 @@ if PROJECT_ROOT not in sys.path:
     sys.path.insert(0, PROJECT_ROOT)
 
 from motion_ae.config import load_config
-from motion_ae.dataset import build_datasets
+from motion_ae.dataset import build_datasets, dataloader_io_options, try_preload_one_dataset
 from motion_ae.evaluator import evaluate
 from motion_ae.losses import ReconstructionLoss
 from motion_ae.models.autoencoder import MotionAutoEncoder
@@ -53,14 +53,19 @@ def main() -> None:
 
     train_ds, val_ds, _normalizer, feature_slices = build_datasets(cfg, stats_path=stats_path)
     ds = val_ds if args.split == "val" else train_ds
+    data_on_gpu = try_preload_one_dataset(ds, device, cfg.training.preload_to_gpu)
+    num_workers, pin_memory = dataloader_io_options(
+        device, data_on_gpu, cfg.training.num_workers,
+    )
+
     logger.info(f"Evaluating on {args.split} set ({len(ds)} samples)")
 
     loader = DataLoader(
         ds,
         batch_size=cfg.training.batch_size,
         shuffle=False,
-        num_workers=cfg.training.num_workers,
-        pin_memory=device.type == "cuda",
+        num_workers=num_workers,
+        pin_memory=pin_memory,
     )
 
     model = MotionAutoEncoder(

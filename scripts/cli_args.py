@@ -46,6 +46,11 @@ def add_runtime_args(parser: argparse.ArgumentParser) -> None:
     group.add_argument("--learning_rate", "--lr", type=float, default=None)
     group.add_argument("--weight_decay", type=float, default=None)
     group.add_argument("--num_workers", type=int, default=None)
+    group.add_argument(
+        "--no_dataset_cache",
+        action="store_true",
+        help="禁用解析/归一化/打包后的数据集缓存。",
+    )
     group.add_argument("--seed", type=int, default=None)
     group.add_argument("--device", type=str, default=None, help="例如 cpu / cuda / cuda:0 / auto")
     group.add_argument("--debug", action="store_true", help="打开数据调试打印。")
@@ -108,6 +113,8 @@ def apply_cli_overrides(cfg: MotionAEConfig, args: argparse.Namespace) -> Motion
         cfg.training.weight_decay = args.weight_decay
     if getattr(args, "num_workers", None) is not None:
         cfg.training.num_workers = args.num_workers
+    if getattr(args, "no_dataset_cache", False):
+        cfg.training.dataset_cache = False
     if getattr(args, "seed", None) is not None:
         cfg.training.seed = args.seed
     if getattr(args, "device", None) is not None:

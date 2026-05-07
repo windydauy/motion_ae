@@ -30,7 +30,8 @@ def evaluate(
     n_batches = 0
 
     for batch in loader:
-        batch = batch.to(device)
+        if batch.device != device:
+            batch = batch.to(device, non_blocking=True)
         x_hat, _z_d, _info = model(batch)
         _loss, loss_dict = criterion(x_hat, batch)
 

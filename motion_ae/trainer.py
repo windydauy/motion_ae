@@ -3,10 +3,9 @@ from __future__ import annotations
 
 import os
 import time
-from typing import Dict, Optional
+from typing import Any, Dict, Optional
 
 import torch
-from torch.utils.data import DataLoader
 
 from motion_ae.config import MotionAEConfig
 from motion_ae.losses import ReconstructionLoss
@@ -24,8 +23,8 @@ class Trainer:
         self,
         model: MotionAutoEncoder,
         criterion: ReconstructionLoss,
-        train_loader: DataLoader,
-        val_loader: DataLoader,
+        train_loader: Any,
+        val_loader: Any,
         cfg: MotionAEConfig,
         device: torch.device,
         checkpoint_dir: str,
@@ -56,6 +55,11 @@ class Trainer:
         self.start_epoch = 0
         os.makedirs(self.checkpoint_dir, exist_ok=True)
 
+    def _batch_to_device(self, batch: torch.Tensor) -> torch.Tensor:
+        if batch.device == self.device:
+            return batch
+        return batch.to(self.device, non_blocking=True)
+
     def save_checkpoint(self, epoch: int, filename: str = "checkpoint.pt") -> str:
         """保存 checkpoint。"""
         path = os.path.join(self.checkpoint_dir, filename)
@@ -85,49 +89,63 @@ class Trainer:
     def _train_epoch(self) -> Dict[str, float]:
         """训练单个 epoch。"""
         self.model.train()
-        total_loss = 0.0
-        group_losses: Dict[str, float] = {}
+        loss_sums: Dict[str, torch.Tensor] = {}
         n_batches = 0
 
         for batch in self.train_loader:
-            batch = batch.to(self.device)
+            batch = self._batch_to_device(batch)
             x_hat, _z_d, _info = self.model(batch)
             loss, loss_dict = self.criterion(x_hat, batch)
 
-            self.optimizer.zero_grad()
+            self.optimizer.zero_grad(set_to_none=True)
             loss.backward()
             self.optimizer.step()
 
-            total_loss += loss.item()
+            loss_dict.setdefault("total", loss)
             for key, value in loss_dict.items():
-                group_losses[key] = group_losses.get(key, 0.0) + value.item()
+                detached = value.detach()
+                if key in loss_sums:
+                    loss_sums[key] = loss_sums[key] + detached
+                else:
+                    loss_sums[key] = detached
             n_batches += 1
 
-        avg = {key: value / max(n_batches, 1) for key, value in group_losses.items()}
-        avg["total"] = total_loss / max(n_batches, 1)
-        return avg
+        return self._average_loss_sums(loss_sums, n_batches)
 
     @torch.no_grad()
     def _val_epoch(self) -> Dict[str, float]:
         """验证单个 epoch。"""
         self.model.eval()
-        total_loss = 0.0
-        group_losses: Dict[str, float] = {}
+        loss_sums: Dict[str, torch.Tensor] = {}
         n_batches = 0
 
         for batch in self.val_loader:
-            batch = batch.to(self.device)
+            batch = self._batch_to_device(batch)
             x_hat, _z_d, _info = self.model(batch)
             loss, loss_dict = self.criterion(x_hat, batch)
 
-            total_loss += loss.item()
+            loss_dict.setdefault("total", loss)
             for key, value in loss_dict.items():
-                group_losses[key] = group_losses.get(key, 0.0) + value.item()
+                detached = value.detach()
+                if key in loss_sums:
+                    loss_sums[key] = loss_sums[key] + detached
+                else:
+                    loss_sums[key] = detached
             n_batches += 1
 
-        avg = {key: value / max(n_batches, 1) for key, value in group_losses.items()}
-        avg["total"] = total_loss / max(n_batches, 1)
-        return avg
+        return self._average_loss_sums(loss_sums, n_batches)
+
+    @staticmethod
+    def _average_loss_sums(
+        loss_sums: Dict[str, torch.Tensor],
+        n_batches: int,
+    ) -> Dict[str, float]:
+        if n_batches == 0:
+            return {"total": 0.0}
+        return {
+            key: (value / n_batches).item()
+            for key, value in loss_sums.items()
+        }
 
     def train(self) -> Dict[str, float]:
         """执行完整训练流程。"""

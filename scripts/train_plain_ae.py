@@ -7,14 +7,17 @@ from typing import Dict, List, Tuple
 
 import torch
 import torch.nn as nn
-from torch.utils.data import DataLoader
 
 PROJECT_ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 if PROJECT_ROOT not in sys.path:
     sys.path.insert(0, PROJECT_ROOT)
 
 from motion_ae.config import load_config
-from motion_ae.dataset import build_datasets
+from motion_ae.dataset import (
+    build_datasets,
+    build_train_val_loaders,
+    try_preload_datasets_to_gpu,
+)
 from motion_ae.losses import ReconstructionLoss
 from motion_ae.models.plain_autoencoder import PlainMotionAutoEncoder
 from motion_ae.trainer import Trainer
@@ -103,21 +106,15 @@ def main() -> None:
     normalizer.save(stats_path)
     logger.info(f"Normalization stats saved to {stats_path}")
 
-    pin_memory = device.type == "cuda"
-    train_loader = DataLoader(
-        train_ds,
-        batch_size=cfg.training.batch_size,
-        shuffle=True,
-        num_workers=cfg.training.num_workers,
-        pin_memory=pin_memory,
-        drop_last=True,
+    train_on_gpu, val_on_gpu = try_preload_datasets_to_gpu(
+        train_ds, val_ds, device, cfg.training.preload_to_gpu,
     )
-    val_loader = DataLoader(
-        val_ds,
-        batch_size=cfg.training.batch_size,
-        shuffle=False,
-        num_workers=cfg.training.num_workers,
-        pin_memory=pin_memory,
+    data_on_gpu = train_on_gpu and val_on_gpu
+    if cfg.training.preload_to_gpu and data_on_gpu:
+        logger.info("preload_to_gpu: 训练与验证张量已在 %s", device)
+        logger.info("Using GPU TensorBatchLoader to avoid CPU DataLoader collation")
+    train_loader, val_loader = build_train_val_loaders(
+        train_ds, val_ds, cfg, device, data_on_gpu,
     )
 
     model = TrainerCompatiblePlainAutoEncoder(
