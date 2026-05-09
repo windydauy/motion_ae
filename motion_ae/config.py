@@ -52,11 +52,18 @@ class TrainingConfig:
     learning_rate: float = 1e-3
     weight_decay: float = 1e-5
     num_epochs: int = 100
+    scheduler_t_max: Optional[int] = None
+    grad_clip_norm: Optional[float] = None
     num_workers: int = 4
     # 将归一化后的整块 (N,W,D) 张量预载到 GPU；显存不足时自动回退 CPU。
     preload_to_gpu: bool = False
     # 缓存解析/归一化/打包后的 train/val 窗口，后续同配置直接复用。
     dataset_cache: bool = True
+    # torchrun/DDP 训练时开启；单卡入口默认不使用。
+    distributed: bool = False
+    ddp_backend: str = "nccl"
+    # DDP 下 batch_size 默认表示每张卡的 local batch。
+    batch_size_mode: str = "per_rank"
     seed: int = 42
     save_every: int = 5
     output_root: str = "outputs"

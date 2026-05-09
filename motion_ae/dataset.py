@@ -66,6 +66,152 @@ def _dataset_cache_path(cfg: MotionAEConfig) -> str:
     return os.path.join(cache_dir, f"motion_windows_{_dataset_cache_key(cfg)}.pt")
 
 
+def _sharded_dataset_cache_dir(cfg: MotionAEConfig, world_size: int) -> str:
+    cache_dir = os.path.join(cfg.training.output_root, "_dataset_cache")
+    return os.path.join(cache_dir, f"motion_windows_{_dataset_cache_key(cfg)}_w{world_size}")
+
+
+def _rank_bounds(n: int, rank: int, world_size: int) -> Tuple[int, int]:
+    base = n // world_size
+    rem = n % world_size
+    start = rank * base + min(rank, rem)
+    end = start + base + (1 if rank < rem else 0)
+    return start, end
+
+
+def sharded_dataset_cache_exists(cfg: MotionAEConfig, world_size: int) -> bool:
+    cache_dir = _sharded_dataset_cache_dir(cfg, world_size)
+    meta_path = os.path.join(cache_dir, "meta.pt")
+    if not os.path.exists(meta_path):
+        return False
+    for rank in range(world_size):
+        if not os.path.exists(os.path.join(cache_dir, f"train_rank{rank:05d}.pt")):
+            return False
+        if not os.path.exists(os.path.join(cache_dir, f"val_rank{rank:05d}.pt")):
+            return False
+    return True
+
+
+def _save_tensor_shards(
+    data: torch.Tensor,
+    cache_dir: str,
+    split: str,
+    world_size: int,
+) -> List[int]:
+    counts: List[int] = []
+    n = len(data)
+    for rank in range(world_size):
+        start, end = _rank_bounds(n, rank, world_size)
+        shard = data[start:end].contiguous().clone()
+        path = os.path.join(cache_dir, f"{split}_rank{rank:05d}.pt")
+        torch.save({"data": shard, "start": start, "end": end}, path)
+        counts.append(end - start)
+        del shard
+    return counts
+
+
+def ensure_sharded_dataset_cache(cfg: MotionAEConfig, world_size: int) -> str:
+    """确保存在按 rank 切分的 packed dataset cache。
+
+    调用方应只在 rank0 执行该函数，再用 distributed barrier 同步其他 rank。
+    """
+    if not cfg.training.dataset_cache:
+        raise ValueError("DDP sharded preload requires training.dataset_cache=true")
+
+    cache_dir = _sharded_dataset_cache_dir(cfg, world_size)
+    if sharded_dataset_cache_exists(cfg, world_size):
+        logger.info("Using existing sharded dataset cache: %s", cache_dir)
+        return cache_dir
+
+    os.makedirs(cache_dir, exist_ok=True)
+    logger.info("Building sharded dataset cache in %s", cache_dir)
+    full_cache_exists = os.path.exists(_dataset_cache_path(cfg))
+    original_dataset_cache = cfg.training.dataset_cache
+    if not full_cache_exists:
+        cfg.training.dataset_cache = False
+    try:
+        train_ds, val_ds, normalizer, slices = build_datasets(cfg)
+    finally:
+        cfg.training.dataset_cache = original_dataset_cache
+
+    t0 = time.time()
+    train_counts = _save_tensor_shards(train_ds.data, cache_dir, "train", world_size)
+    val_counts = _save_tensor_shards(val_ds.data, cache_dir, "val", world_size)
+    meta = {
+        **_dataset_cache_payload(cfg),
+        "cache_key": _dataset_cache_key(cfg),
+        "world_size": world_size,
+        "num_train_windows": len(train_ds),
+        "num_val_windows": len(val_ds),
+        "train_counts": train_counts,
+        "val_counts": val_counts,
+        "mean": normalizer.mean,
+        "std": normalizer.std,
+        "slices": _feature_slices_to_dict(slices),
+    }
+    tmp_meta_path = os.path.join(cache_dir, "meta.pt.tmp")
+    meta_path = os.path.join(cache_dir, "meta.pt")
+    torch.save(meta, tmp_meta_path)
+    os.replace(tmp_meta_path, meta_path)
+    logger.info(
+        "Saved sharded dataset cache in %.1fs (world_size=%d, train=%d, val=%d)",
+        time.time() - t0,
+        world_size,
+        len(train_ds),
+        len(val_ds),
+    )
+    return cache_dir
+
+
+def load_sharded_datasets(
+    cfg: MotionAEConfig,
+    rank: int,
+    world_size: int,
+) -> Tuple["MotionWindowDataset", "MotionWindowDataset", FeatureNormalizer, FeatureSlices, dict]:
+    """加载当前 rank 的 train/val packed dataset shard。"""
+    cache_dir = _sharded_dataset_cache_dir(cfg, world_size)
+    meta_path = os.path.join(cache_dir, "meta.pt")
+    if not os.path.exists(meta_path):
+        raise FileNotFoundError(f"Sharded dataset cache meta not found: {meta_path}")
+
+    t0 = time.time()
+    meta = torch.load(meta_path, map_location="cpu", weights_only=False)
+    if int(meta["world_size"]) != int(world_size):
+        raise ValueError(f"Cache world_size mismatch: {meta['world_size']} vs {world_size}")
+    normalizer = FeatureNormalizer(
+        np.asarray(meta["mean"], dtype=np.float32),
+        np.asarray(meta["std"], dtype=np.float32),
+        eps=cfg.normalization.eps,
+    )
+    slices = _feature_slices_from_dict(meta["slices"])
+
+    train_payload = torch.load(
+        os.path.join(cache_dir, f"train_rank{rank:05d}.pt"),
+        map_location="cpu",
+        weights_only=False,
+    )
+    val_payload = torch.load(
+        os.path.join(cache_dir, f"val_rank{rank:05d}.pt"),
+        map_location="cpu",
+        weights_only=False,
+    )
+    train_ds = MotionWindowDataset.from_tensor(
+        train_payload["data"], cfg, normalizer, slices,
+    )
+    val_ds = MotionWindowDataset.from_tensor(
+        val_payload["data"], cfg, normalizer, slices,
+    )
+    logger.info(
+        "Loaded sharded dataset cache rank %d/%d in %.1fs (train=%d, val=%d)",
+        rank,
+        world_size,
+        time.time() - t0,
+        len(train_ds),
+        len(val_ds),
+    )
+    return train_ds, val_ds, normalizer, slices, meta
+
+
 def _try_load_dataset_cache(
     cfg: MotionAEConfig,
     stats_path: Optional[str] = None,

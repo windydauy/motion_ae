@@ -1,0 +1,85 @@
+• 我对另一个模型的结论：方向基本对，但有两处说得过满。
+
+  第一，当前不是“模型完全无法学习”。它从 val_loss=0.827 学到过 0.608 左
+  右，说明模型和数据管线是能工作的。更准确的判断是：模型在 400-500
+  epoch 左右达到较好点后，继续用几乎不衰减的高学习率训练，导致量化 AE
+  的表示开始漂移，train/val 一起退化。
+
+  第二，FSQ 不是简单“超出有效范围”。你的 iFSQ 在 motion_ae/models/
+  ifsq.py:66 里用 2*sigmoid(1.6*z_c)-1 强制映射到 (-1,1)，所以不会数值
+  越界。真正风险是：z_c 绝对值变大后 sigmoid 饱和，z_d 越来越靠近边界
+  code，梯度变弱、code entropy 下降，decoder 收到的信息质量变差。
+
+  我认为最主要原因排序如下：
+
+  1. 学习率调度是最强证据。
+     配置里 learning_rate=1e-3、num_epochs=30000，而 scheduler 的 T_max
+     直接等于 num_epochs，见 motion_ae/trainer.py:49。这意味着 epoch
+     1000 时 LR 仍约等于 0.997e-3，几乎没降。你的最好 val 大概在 450 附
+     近，后面还在用接近初始 LR 继续推，量化模型很容易从好点漂走。
+  2. no LayerNorm + iFSQ 是高风险组合，但需要监控确认。
+     配置明确关了 LN，见 configs/no_layer_norm.yaml:51。这会增加
+     encoder latent 分布漂移的可能。另一个模型说的“激活漂移”是合理假
+     设，但要用 z_c 范围、z_d 边界比例、code entropy/perplexity 来验
+     证。
+  3. joint_vel 确实主导 total，但不是因为维度更多。
+     loss 是每个 group 内部 .mean() 后再相加，见 motion_ae/
+     losses.py:50。所以 joint_vel 主导 total，是因为它本身重建 MSE 大，
+     不是因为 joint 维度被重复加权。它更像是高频速度信号在 32 维离散
+     latent 下最难恢复。
+
+  我建议优先这样改：
+
+  1. 先不要继续用 epoch 999 checkpoint，优先用 best_model.pt。
+     这次 run 的最好点大概率在 epoch 450 左右，后面已经是退化阶段。
+  2. 做一个保守稳定版配置：
+
+     model:
+       use_layer_norm: true
+
+     training:
+       learning_rate: 3.0e-4
+       num_epochs: 3000
+       save_every: 100
+
+     如果你必须保持 no-layer-norm 做 ablation，那就更保守：
+
+     model:
+       use_layer_norm: false
+
+     training:
+       learning_rate: 1.0e-4   # 或先试 3.0e-4
+       num_epochs: 3000
+       save_every: 100
+
+  3. 代码层面加三个小改动，比单纯改 loss 更有针对性：
+      - 加 grad_clip_norm: 1.0，在 loss.backward() 后、optimizer.step()
+        前 clip。
+      - 把 Adam 换成 AdamW，避免 coupled weight decay 干扰 Adam 的自适
+        应更新。
+      - 给 scheduler 单独加 scheduler_t_max，不要绑定
+        num_epochs=30000。比如 scheduler_t_max: 1000 或 2000。
+  4. 加 iFSQ 监控，否则现在只能猜。
+     每个 epoch 记录：
+      - z_c_abs_mean, z_c_abs_max
+      - z_d_boundary_frac: z_d == 0 或 z_d == L-1 的比例
+      - 每个 latent dim 的 code entropy / perplexity
+      - scaled 距离整数边界的分布
+  5. 对 joint_vel 不建议直接永久降权。
+     降低 joint_vel 权重会让 total 看起来好看，但可能只是隐藏速度重建失
+     败。更好的做法是：先稳定训练，再考虑 velocity loss warmup，例如前
+     100-200 epoch 降低 joint_vel 权重，之后恢复到 1.0。
+
+  最小验证实验建议跑 4 组，每组只看前 1000 epoch：当前配置复现、no-LN +
+  lr=3e-4、LN + lr=3e-4、plain AE 无量化。这样能分清楚问题到底主要来自
+  LR、no-LN、还是 iFSQ bottleneck。
+
+  推荐先跑稳定版：
+
+  ./scripts/train.sh --config configs/stable_layer_norm.yaml --experiment_name motion_ae --run_name
+stable_ln
+
+  no-LN ablation 再跑：
+
+  ./scripts/train.sh --config configs/no_layer_norm.yaml --experiment_name motion_ae --run_name
+stable_no_ln

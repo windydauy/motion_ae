@@ -1,15 +1,14 @@
 # ============================================================
-# motion_ae 默认配置（关闭 LayerNorm 版本）
+# motion_ae 稳定训练配置：LayerNorm + conservative LR + iFSQ monitoring
 # ============================================================
 
 # --- 数据 ---
 data:
-  # 支持单个 npz 路径或包含 motion.npz 的根目录 /home/humanoid/yzh/TextOp/trip_npz_filtered/optitrack_data/BOXING_WALK/
-  data_path: "/pfs/pfs-ilWc5D/yzh/g1_soma/npz/" # /home/humanoid/yzh/TextOp/motion_ae/converted_1031/
+  data_path: "/pfs/pfs-ilWc5D/yzh/g1_soma/npz/"
   npz_filename: "motion.npz"
-  val_ratio: 0.2          # 按文件级别划分验证集比例
+  val_ratio: 0.2
 
-# --- NPZ 键名映射（如果你的 npz 字段名不同，在这里修改） ---
+# --- NPZ 键名映射 ---
 npz_keys:
   joint_pos: "joint_pos"
   joint_vel: "joint_vel"
@@ -21,16 +20,10 @@ npz_keys:
 
 # --- Pelvis / Anchor 配置 ---
 pelvis:
-  body_index: 0            # pelvis 在 body 维度中的索引
+  body_index: 0
 
 # --- 特征构建 ---
 feature:
-  # 各特征组及其在最终特征向量中的维度范围（自动计算，此处仅做参考）
-  # joint_pos:       [0, num_joints)
-  # joint_vel:       [num_joints, 2*num_joints)
-  # pelvis_rot6d_b:  [2*num_joints, 2*num_joints+6)
-  # pelvis_lin_vel_b:[2*num_joints+6, 2*num_joints+9)
-  # pelvis_ang_vel_b:[2*num_joints+9, 2*num_joints+12)
   groups:
     - name: "joint_pos"
     - name: "joint_vel"
@@ -47,18 +40,17 @@ model:
   encoder_hidden_dims: [2048, 1024, 512, 512]
   decoder_hidden_dims: [2048, 1024, 512, 512]
   ifsq_levels: [32, 32, 32, 32, 32, 32, 32, 32, 32, 32, 32, 32, 32, 32, 32, 32, 32, 32, 32, 32, 32, 32, 32, 32, 32, 32, 32, 32, 32, 32, 32, 32]
-
   activation: "silu"
-  use_layer_norm: false
+  use_layer_norm: true
 
 # --- 训练 ---
 training:
   batch_size: 2048
-  learning_rate: 1.0e-4
+  learning_rate: 3.0e-4
   weight_decay: 1.0e-5
-  num_epochs: 300000
-  scheduler_t_max: 10000
-  grad_clip_norm: 2.0
+  num_epochs: 3000
+  scheduler_t_max: 1000
+  grad_clip_norm: 1.0
   num_workers: 16
   preload_to_gpu: true
   dataset_cache: true
@@ -66,7 +58,7 @@ training:
   ddp_backend: "nccl"
   batch_size_mode: "per_rank"
   seed: 42
-  save_every: 500            # 每 N epoch 保存一次 checkpoint
+  save_every: 100
   output_root: "outputs"
   experiment_name: "motion_ae"
   run_name: ""
@@ -85,7 +77,6 @@ logger:
 # --- 损失 ---
 loss:
   type: "mse"
-  # 分组权重（默认全部为 1.0，后续可按需调整）
   group_weights:
     joint_pos: 1.0
     joint_vel: 1.0
@@ -95,7 +86,7 @@ loss:
 
 # --- 归一化 ---
 normalization:
-  eps: 1.0e-6              # std 下限保护
+  eps: 1.0e-6
   stats_file: "stats.npz"
 
 # --- 调试 ---

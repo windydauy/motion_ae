@@ -3,6 +3,7 @@ from __future__ import annotations
 
 import os
 import time
+import math
 from typing import Any, Dict, Optional
 
 import torch
@@ -11,6 +12,11 @@ from motion_ae.config import MotionAEConfig
 from motion_ae.losses import ReconstructionLoss
 from motion_ae.models.autoencoder import MotionAutoEncoder
 from motion_ae.utils.logging import get_logger
+from motion_ae.utils.quantizer_metrics import (
+    finalize_quantizer_sums,
+    init_quantizer_sums,
+    update_quantizer_sums,
+)
 from motion_ae.utils.tracking import NullTracker
 
 logger = get_logger(__name__)
@@ -41,14 +47,17 @@ class Trainer:
         self.run_dir = run_dir or checkpoint_dir
         self.tracker = tracker or NullTracker()
 
-        self.optimizer = torch.optim.Adam(
+        self.optimizer = torch.optim.AdamW(
             model.parameters(),
             lr=cfg.training.learning_rate,
             weight_decay=cfg.training.weight_decay,
         )
-        self.scheduler = torch.optim.lr_scheduler.CosineAnnealingLR(
+        scheduler_t_max = max(1, cfg.training.scheduler_t_max or cfg.training.num_epochs)
+        self.scheduler = torch.optim.lr_scheduler.LambdaLR(
             self.optimizer,
-            T_max=cfg.training.num_epochs,
+            lr_lambda=lambda epoch: 0.5 * (
+                1.0 + math.cos(math.pi * min(epoch, scheduler_t_max) / scheduler_t_max)
+            ),
         )
 
         self.best_val_loss = float("inf")
@@ -90,16 +99,23 @@ class Trainer:
         """训练单个 epoch。"""
         self.model.train()
         loss_sums: Dict[str, torch.Tensor] = {}
+        quant_sums = init_quantizer_sums(self.model.quantizer._levels_t, self.device)
         n_batches = 0
 
         for batch in self.train_loader:
             batch = self._batch_to_device(batch)
-            x_hat, _z_d, _info = self.model(batch)
+            x_hat, _z_d, info = self.model(batch)
             loss, loss_dict = self.criterion(x_hat, batch)
 
             self.optimizer.zero_grad(set_to_none=True)
             loss.backward()
+            if self.cfg.training.grad_clip_norm is not None:
+                torch.nn.utils.clip_grad_norm_(
+                    self.model.parameters(),
+                    self.cfg.training.grad_clip_norm,
+                )
             self.optimizer.step()
+            update_quantizer_sums(quant_sums, info)
 
             loss_dict.setdefault("total", loss)
             for key, value in loss_dict.items():
@@ -110,19 +126,23 @@ class Trainer:
                     loss_sums[key] = detached
             n_batches += 1
 
-        return self._average_loss_sums(loss_sums, n_batches)
+        metrics = self._average_loss_sums(loss_sums, n_batches)
+        metrics.update(finalize_quantizer_sums(quant_sums))
+        return metrics
 
     @torch.no_grad()
     def _val_epoch(self) -> Dict[str, float]:
         """验证单个 epoch。"""
         self.model.eval()
         loss_sums: Dict[str, torch.Tensor] = {}
+        quant_sums = init_quantizer_sums(self.model.quantizer._levels_t, self.device)
         n_batches = 0
 
         for batch in self.val_loader:
             batch = self._batch_to_device(batch)
-            x_hat, _z_d, _info = self.model(batch)
+            x_hat, _z_d, info = self.model(batch)
             loss, loss_dict = self.criterion(x_hat, batch)
+            update_quantizer_sums(quant_sums, info)
 
             loss_dict.setdefault("total", loss)
             for key, value in loss_dict.items():
@@ -133,7 +153,9 @@ class Trainer:
                     loss_sums[key] = detached
             n_batches += 1
 
-        return self._average_loss_sums(loss_sums, n_batches)
+        metrics = self._average_loss_sums(loss_sums, n_batches)
+        metrics.update(finalize_quantizer_sums(quant_sums))
+        return metrics
 
     @staticmethod
     def _average_loss_sums(

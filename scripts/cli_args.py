@@ -45,11 +45,22 @@ def add_runtime_args(parser: argparse.ArgumentParser) -> None:
     group.add_argument("--num_epochs", type=int, default=None)
     group.add_argument("--learning_rate", "--lr", type=float, default=None)
     group.add_argument("--weight_decay", type=float, default=None)
+    group.add_argument("--scheduler_t_max", type=int, default=None)
+    group.add_argument("--grad_clip_norm", type=float, default=None)
     group.add_argument("--num_workers", type=int, default=None)
     group.add_argument(
         "--no_dataset_cache",
         action="store_true",
         help="禁用解析/归一化/打包后的数据集缓存。",
+    )
+    group.add_argument("--distributed", action="store_true", help="启用 torchrun/DDP 训练路径。")
+    group.add_argument("--ddp_backend", type=str, default=None, help="DDP backend，默认 nccl。")
+    group.add_argument(
+        "--batch_size_mode",
+        type=str,
+        default=None,
+        choices={"per_rank", "global"},
+        help="DDP batch_size 语义：per_rank 表示每卡 batch，global 表示全局 batch。",
     )
     group.add_argument("--seed", type=int, default=None)
     group.add_argument("--device", type=str, default=None, help="例如 cpu / cuda / cuda:0 / auto")
@@ -111,10 +122,20 @@ def apply_cli_overrides(cfg: MotionAEConfig, args: argparse.Namespace) -> Motion
         cfg.training.learning_rate = args.learning_rate
     if getattr(args, "weight_decay", None) is not None:
         cfg.training.weight_decay = args.weight_decay
+    if getattr(args, "scheduler_t_max", None) is not None:
+        cfg.training.scheduler_t_max = args.scheduler_t_max
+    if getattr(args, "grad_clip_norm", None) is not None:
+        cfg.training.grad_clip_norm = args.grad_clip_norm
     if getattr(args, "num_workers", None) is not None:
         cfg.training.num_workers = args.num_workers
     if getattr(args, "no_dataset_cache", False):
         cfg.training.dataset_cache = False
+    if getattr(args, "distributed", False):
+        cfg.training.distributed = True
+    if getattr(args, "ddp_backend", None) is not None:
+        cfg.training.ddp_backend = args.ddp_backend
+    if getattr(args, "batch_size_mode", None) is not None:
+        cfg.training.batch_size_mode = args.batch_size_mode
     if getattr(args, "seed", None) is not None:
         cfg.training.seed = args.seed
     if getattr(args, "device", None) is not None:
