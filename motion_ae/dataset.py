@@ -46,6 +46,7 @@ def _dataset_cache_payload(cfg: MotionAEConfig) -> dict:
         "data_path": os.path.abspath(cfg.data.data_path),
         "npz_filename": cfg.data.npz_filename,
         "val_ratio": cfg.data.val_ratio,
+        "max_files": cfg.data.max_files,
         "seed": cfg.training.seed,
         "window_size": cfg.window_size,
         "stride": cfg.stride,
@@ -597,6 +598,8 @@ def build_datasets(
 
     t0 = time.time()
     npz_paths = find_npz_files(cfg.data.data_path, cfg.data.npz_filename)
+    if cfg.data.max_files is not None:
+        npz_paths = npz_paths[: int(cfg.data.max_files)]
     assert len(npz_paths) > 0, f"No npz files found in {cfg.data.data_path}"
     logger.info(
         "Found %d npz files under %s in %.1fs",

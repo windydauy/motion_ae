@@ -90,6 +90,14 @@ python -m pip install -U pip
 python -m pip install -r requirements.txt
 ```
 
+如果在已有 conda 环境中使用，请优先用同一个解释器运行测试和脚本：
+
+```bash
+python -m pytest
+```
+
+不要直接运行系统里的 `pytest` 可执行文件，否则可能会调用另一个 Python / PyTorch 安装。
+
 如果你使用 conda，也可以：
 
 ```bash
@@ -97,6 +105,66 @@ conda activate text_tracker
 cd /home/humanoid/yzh/TextOp/motion_ae
 python -m pip install -r requirements.txt
 ```
+
+## Transformer VAE
+
+本仓库另有独立的 `transformer_vae` 包，用同一套 `motion_ae` 数据读取、yaw-only anchor 特征构造、归一化和滑窗缓存，模型结构迁移自 TextOpRobotMDAR 的 MLD-style Motion VAE。当前默认是 10 帧窗口整体重建，loss 为 feature reconstruction + KL，不依赖 TextOp 的 MuJoCo / FK / contact loss。
+
+默认配置：
+
+```text
+configs/transformer_vae.yaml
+```
+
+训练：
+
+```bash
+cd /pfs/pfs-ilWc5D/yzh/motion_ae
+python -m transformer_vae.scripts.train \
+  --config configs/transformer_vae.yaml \
+  --logger none \
+  --run_name baseline
+```
+
+快速 smoke test 可限制文件数和步数：
+
+```bash
+python -m transformer_vae.scripts.train \
+  --config configs/transformer_vae.yaml \
+  --logger none \
+  --max_files 4 \
+  --batch_size 8 \
+  --max_steps 2 \
+  --eval_every 1 \
+  --eval_steps 1 \
+  --save_every 2 \
+  --device cpu
+```
+
+评估：
+
+```bash
+python -m transformer_vae.scripts.evaluate \
+  --config configs/transformer_vae.yaml \
+  --logger none \
+  --run_name <run_dir_name> \
+  --checkpoint best_model.pt \
+  --split val
+```
+
+推理：
+
+```bash
+python -m transformer_vae.scripts.infer \
+  --config configs/transformer_vae.yaml \
+  --logger none \
+  --run_name <run_dir_name> \
+  --checkpoint best_model.pt \
+  --npz_path /pfs/pfs-ilWc5D/yzh/g1_soma/npz_part/220727/arc_walk_left_start_002__A040/motion.npz \
+  --output transformer_vae_infer_output.npz
+```
+
+输出包含 normalized 与 denormalized 的 `original` / `reconstructed`，以及 `z`、`mu`、`logvar`。
 
 ## 数据格式
 

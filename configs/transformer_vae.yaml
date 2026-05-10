@@ -1,0 +1,85 @@
+# Motion Transformer VAE default configuration.
+
+data:
+  data_path: "/pfs/pfs-ilWc5D/yzh/g1_soma/npz_part"
+  npz_filename: "motion.npz"
+  val_ratio: 0.1
+  max_files: null
+
+npz_keys:
+  joint_pos: "joint_pos"
+  joint_vel: "joint_vel"
+  body_pos_w: "body_pos_w"
+  body_quat_w: "body_quat_w"
+  body_lin_vel_w: "body_lin_vel_w"
+  body_ang_vel_w: "body_ang_vel_w"
+  fps: "fps"
+
+pelvis:
+  body_index: 0
+
+window_size: 10
+stride: 1
+
+model:
+  latent_dim: [1, 128]
+  h_dim: 512
+  ff_size: 1024
+  num_layers: 9
+  num_heads: 4
+  dropout: 0.1
+  arch: "all_encoder"
+  normalize_before: false
+  activation: "gelu"
+  position_embedding: "learned"
+
+training:
+  batch_size: 512
+  learning_rate: 1.0e-4
+  weight_decay: 0.0
+  num_epochs: 1
+  max_steps: 100000
+  eval_every: 2000
+  eval_steps: 10
+  anneal_lr: true
+  scheduler_t_max: null
+  grad_clip_norm: 1.0
+  num_workers: 4
+  preload_to_gpu: false
+  dataset_cache: true
+  distributed: false
+  ddp_backend: "nccl"
+  batch_size_mode: "per_rank"
+  seed: 42
+  save_every: 20000
+  output_root: "outputs"
+  experiment_name: "transformer_vae"
+  run_name: ""
+  device: "auto"
+
+logger:
+  logger: "wandb"
+  log_project_name: "motion_ae"
+  wandb_entity: null
+  wandb_mode: "online"
+  wandb_tags: ["transformer_vae"]
+  wandb_notes: ""
+  save_code: false
+
+loss:
+  type: "huber"
+  beta: 1.0
+  rec_weight: 1.0
+  kl_weight: 1.0e-4
+  group_weights:
+    joint_pos: 1.0
+    joint_vel: 1.0
+    pelvis_rot6d_b: 1.0
+    pelvis_lin_vel_b: 1.0
+    pelvis_ang_vel_b: 1.0
+
+normalization:
+  eps: 1.0e-6
+  stats_file: "stats.npz"
+
+debug: false

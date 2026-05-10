@@ -15,6 +15,7 @@ class DataConfig:
     data_path: str = ""
     npz_filename: str = "motion.npz"
     val_ratio: float = 0.1
+    max_files: Optional[int] = None
 
 
 @dataclass
