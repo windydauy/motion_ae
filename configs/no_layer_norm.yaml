@@ -5,9 +5,9 @@
 # --- 数据 ---
 data:
   # 支持单个 npz 路径或包含 motion.npz 的根目录 /home/humanoid/yzh/TextOp/trip_npz_filtered/optitrack_data/BOXING_WALK/
-  data_path: "/pfs/pfs-ilWc5D/yzh/g1_soma/npz/" # /home/humanoid/yzh/TextOp/motion_ae/converted_1031/
+  data_path: "/home/humanoid/yzh/TextOp/motion_ae/optritrack_npz_filtered" # /home/humanoid/yzh/TextOp/motion_ae/converted_1031/
   npz_filename: "motion.npz"
-  val_ratio: 0.2          # 按文件级别划分验证集比例
+  val_ratio: 0.05          # 按文件级别划分验证集比例
 
 # --- NPZ 键名映射（如果你的 npz 字段名不同，在这里修改） ---
 npz_keys:
@@ -39,7 +39,7 @@ feature:
     - name: "pelvis_ang_vel_b"
 
 # --- 滑窗 ---
-window_size: 20
+window_size: 10
 stride: 4
 
 # --- 模型 ---
@@ -53,8 +53,8 @@ model:
 
 # --- 训练 ---
 training:
-  batch_size: 2048
-  learning_rate: 1.0e-4
+  batch_size: 4096
+  learning_rate: 1.0e-3
   weight_decay: 1.0e-5
   num_epochs: 300000
   scheduler_t_max: 10000
@@ -70,7 +70,7 @@ training:
   output_root: "outputs"
   experiment_name: "motion_ae"
   run_name: ""
-  device: "cuda:2"
+  device: "cuda:0"
 
 # --- 日志 / 追踪 ---
 logger:

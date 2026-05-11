@@ -5,7 +5,7 @@
 #   ./scripts/train.sh --config configs/no_layer_norm.yaml --experiment_name motion_ae --run_name no_layer_norm
 #
 # 恢复训练：
-#   ./scripts/train.sh --config configs/default.yaml --resume --load_run 2026-04-14_12-00-00_demo --checkpoint last_checkpoint.pt
+#   ./scripts/train.sh --config configs/default.yaml --resume 2026-04-14_12-00-00_demo --checkpoint last_checkpoint.pt
 #
 # 可选环境变量：
 #   PYTHON   解释器，默认 python（建议在已激活的 conda 环境中运行）
