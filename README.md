@@ -316,6 +316,50 @@ python scripts/infer.py \
 
 这对于分析重建误差、量化行为和 latent 离散分布很方便。
 
+## MuJoCo 重建可视化
+
+可以直接传一个 checkpoint 和原始 `motion.npz`，现场重建并在同一个 MuJoCo viewer 中对比：
+
+- 原始数据：半透明绿色空心机器人
+- 重建结果：蓝色实心机器人
+
+AE：
+
+```bash
+cd /home/humanoid/yzh/TextOp/motion_ae
+python -m scripts.visualize_recon_mujoco \
+  --model_type ae \
+  --config configs/default.yaml \
+  --checkpoint /path/to/ae_checkpoint.pt \
+  --npz_path /path/to/motion.npz
+```
+
+Transformer VAE：
+
+```bash
+cd /home/humanoid/yzh/TextOp/motion_ae
+python -m scripts.visualize_recon_mujoco \
+  --model_type vae \
+  --vae_config configs/transformer_vae.yaml \
+  --checkpoint /path/to/vae_checkpoint.pt \
+  --npz_path /path/to/motion.npz
+```
+
+默认会使用 `TextOpTracker` 里的 `g1_act.xml`；如果你的模型路径不同，可以加：
+
+```bash
+--mujoco_xml /path/to/g1.xml
+```
+
+常用控制：
+
+- `Space` / `P`：播放或暂停
+- `Left` / `Right`：逐帧切换
+- `R`：回到第一帧
+- `Q` / `Esc`：退出
+
+该脚本需要运行环境安装 `mujoco`。
+
 ## 输出目录
 
 训练 run 的目录结构如下：
