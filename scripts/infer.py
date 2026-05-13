@@ -13,7 +13,7 @@ if PROJECT_ROOT not in sys.path:
 
 from motion_ae.config import load_config
 from motion_ae.dataset import MotionWindowDataset
-from motion_ae.models.autoencoder import MotionAutoEncoder
+from motion_ae.models.factory import build_motion_autoencoder
 from motion_ae.utils.experiment import get_device, resolve_eval_checkpoint
 from motion_ae.utils.logging import get_logger
 from motion_ae.utils.normalization import FeatureNormalizer
@@ -51,15 +51,7 @@ def main() -> None:
     assert len(ds) > 0, f"No windows from {args.npz_path}"
     feature_dim = ds.slices.total_dim
 
-    model = MotionAutoEncoder(
-        feature_dim=feature_dim,
-        window_size=cfg.window_size,
-        encoder_hidden_dims=cfg.model.encoder_hidden_dims,
-        decoder_hidden_dims=cfg.model.decoder_hidden_dims,
-        ifsq_levels=cfg.model.ifsq_levels,
-        activation=cfg.model.activation,
-        use_layer_norm=cfg.model.use_layer_norm,
-    )
+    model = build_motion_autoencoder(cfg, feature_dim)
     ckpt = torch.load(checkpoint_path, map_location=device, weights_only=False)
     model.load_state_dict(ckpt["model_state_dict"])
     model = model.to(device)

@@ -15,7 +15,7 @@ from motion_ae.config import load_config
 from motion_ae.dataset import build_datasets, dataloader_io_options, try_preload_one_dataset
 from motion_ae.evaluator import evaluate
 from motion_ae.losses import ReconstructionLoss
-from motion_ae.models.autoencoder import MotionAutoEncoder
+from motion_ae.models.factory import build_motion_autoencoder
 from motion_ae.utils.experiment import get_device, resolve_eval_checkpoint, save_metrics_json
 from motion_ae.utils.logging import get_logger
 from motion_ae.utils.seed import set_seed
@@ -68,15 +68,7 @@ def main() -> None:
         pin_memory=pin_memory,
     )
 
-    model = MotionAutoEncoder(
-        feature_dim=feature_slices.total_dim,
-        window_size=cfg.window_size,
-        encoder_hidden_dims=cfg.model.encoder_hidden_dims,
-        decoder_hidden_dims=cfg.model.decoder_hidden_dims,
-        ifsq_levels=cfg.model.ifsq_levels,
-        activation=cfg.model.activation,
-        use_layer_norm=cfg.model.use_layer_norm,
-    )
+    model = build_motion_autoencoder(cfg, feature_slices.total_dim)
     ckpt = torch.load(checkpoint_path, map_location=device, weights_only=False)
     model.load_state_dict(ckpt["model_state_dict"])
     model = model.to(device)

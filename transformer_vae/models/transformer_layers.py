@@ -334,4 +334,6 @@ def _get_activation_fn(activation: str):
         return F.gelu
     if activation == "glu":
         return F.glu
-    raise ValueError(f"activation should be relu/gelu/glu, got {activation}")
+    if activation == "silu":
+        return F.silu
+    raise ValueError(f"activation should be relu/gelu/glu/silu, got {activation}")

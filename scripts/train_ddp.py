@@ -21,7 +21,7 @@ from motion_ae.dataset import (
 )
 from motion_ae.distributed_trainer import DistributedTrainer
 from motion_ae.losses import ReconstructionLoss
-from motion_ae.models.autoencoder import MotionAutoEncoder
+from motion_ae.models.factory import build_motion_autoencoder
 from motion_ae.utils.experiment import (
     create_run_dir,
     resolve_resume_checkpoint,
@@ -133,15 +133,7 @@ def main() -> None:
         train_ds, val_ds, cfg, device, data_on_gpu,
     )
 
-    model = MotionAutoEncoder(
-        feature_dim=feature_slices.total_dim,
-        window_size=cfg.window_size,
-        encoder_hidden_dims=cfg.model.encoder_hidden_dims,
-        decoder_hidden_dims=cfg.model.decoder_hidden_dims,
-        ifsq_levels=cfg.model.ifsq_levels,
-        activation=cfg.model.activation,
-        use_layer_norm=cfg.model.use_layer_norm,
-    ).to(device)
+    model = build_motion_autoencoder(cfg, feature_slices.total_dim).to(device)
     if device.type == "cuda":
         model = DistributedDataParallel(
             model,

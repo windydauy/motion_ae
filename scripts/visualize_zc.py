@@ -21,6 +21,7 @@ if PROJECT_ROOT not in sys.path:
 from motion_ae.config import MotionAEConfig, load_config
 from motion_ae.feature_builder import build_features
 from motion_ae.models.autoencoder import MotionAutoEncoder
+from motion_ae.models.factory import build_motion_autoencoder
 from motion_ae.utils.experiment import get_device
 from motion_ae.utils.io import find_npz_files, load_npz
 from motion_ae.utils.normalization import FeatureNormalizer
@@ -290,15 +291,7 @@ def iter_train_window_batches(
 
 
 def load_model(cfg: MotionAEConfig, checkpoint_path: str, feature_dim: int, device: torch.device) -> MotionAutoEncoder:
-    model = MotionAutoEncoder(
-        feature_dim=feature_dim,
-        window_size=cfg.window_size,
-        encoder_hidden_dims=cfg.model.encoder_hidden_dims,
-        decoder_hidden_dims=cfg.model.decoder_hidden_dims,
-        ifsq_levels=cfg.model.ifsq_levels,
-        activation=cfg.model.activation,
-        use_layer_norm=cfg.model.use_layer_norm,
-    )
+    model = build_motion_autoencoder(cfg, feature_dim)
     ckpt = torch.load(checkpoint_path, map_location=device, weights_only=False)
     model.load_state_dict(ckpt["model_state_dict"])
     return model.to(device).eval()

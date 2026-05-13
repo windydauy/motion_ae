@@ -1,0 +1,112 @@
+# ============================================================
+# motion_ae Transformer backbone 配置（关闭 LayerNorm 版本）
+# 其他设置与 configs/no_layer_norm.yaml 保持一致。
+# ============================================================
+
+# --- 数据 ---
+data:
+  data_path: "/pfs/pfs-ilWc5D/yzh/g1_soma/npz_part/"
+  npz_filename: "motion.npz"
+  val_ratio: 0.2
+
+# --- NPZ 键名映射（如果你的 npz 字段名不同，在这里修改） ---
+npz_keys:
+  joint_pos: "joint_pos"
+  joint_vel: "joint_vel"
+  body_pos_w: "body_pos_w"
+  body_quat_w: "body_quat_w"
+  body_lin_vel_w: "body_lin_vel_w"
+  body_ang_vel_w: "body_ang_vel_w"
+  fps: "fps"
+
+# --- Pelvis / Anchor 配置 ---
+pelvis:
+  body_index: 0
+
+# --- 特征构建 ---
+feature:
+  groups:
+    - name: "joint_pos"
+    - name: "joint_vel"
+    - name: "pelvis_rot6d_b"
+    - name: "pelvis_lin_vel_b"
+    - name: "pelvis_ang_vel_b"
+
+# --- 滑窗 ---
+window_size: 20
+stride: 4
+
+# --- 模型 ---
+model:
+  backbone: "transformer"
+  encoder_hidden_dims: [2048, 1024, 512, 512]
+  decoder_hidden_dims: [2048, 1024, 512, 512]
+  ifsq_levels: [
+    64, 64, 64, 64, 64, 64, 64, 64,
+    64, 64, 64, 64, 64, 64, 64, 64,
+    64, 64, 64, 64, 64, 64, 64, 64,
+    64, 64, 64, 64, 64, 64, 64, 64,
+    64, 64, 64, 64, 64, 64, 64, 64,
+    64, 64, 64, 64, 64, 64, 64, 64,
+    64, 64, 64, 64, 64, 64, 64, 64,
+    64, 64, 64, 64, 64, 64, 64, 64
+  ]
+
+  activation: "silu"
+  use_layer_norm: false
+  transformer_h_dim: 512
+  transformer_ff_size: 1024
+  transformer_num_layers: 9
+  transformer_num_heads: 4
+  transformer_dropout: 0.1
+  transformer_normalize_before: false
+  transformer_position_embedding: "learned"
+
+# --- 训练 ---
+training:
+  batch_size: 1024
+  learning_rate: 1.0e-4
+  weight_decay: 1.0e-5
+  num_epochs: 300000
+  scheduler_t_max: 10000
+  grad_clip_norm: 2.0
+  num_workers: 16
+  preload_to_gpu: true
+  dataset_cache: true
+  distributed: false
+  ddp_backend: "nccl"
+  batch_size_mode: "per_rank"
+  seed: 42
+  save_every: 500
+  output_root: "outputs"
+  experiment_name: "motion_ae"
+  run_name: ""
+  device: "cuda:1"
+
+# --- 日志 / 追踪 ---
+logger:
+  logger: "wandb"
+  log_project_name: "motion_ae"
+  wandb_entity: null
+  wandb_mode: "online"
+  wandb_tags: []
+  wandb_notes: ""
+  save_code: false
+
+# --- 损失 ---
+loss:
+  type: "mse"
+  group_weights:
+    joint_pos: 1.0
+    joint_vel: 1.0
+    pelvis_rot6d_b: 1.0
+    pelvis_lin_vel_b: 1.0
+    pelvis_ang_vel_b: 1.0
+
+# --- 归一化 ---
+normalization:
+  eps: 1.0e-6
+  stats_file: "stats.npz"
+
+# --- 调试 ---
+debug: false

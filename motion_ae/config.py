@@ -41,11 +41,19 @@ class PelvisConfig:
 
 @dataclass
 class ModelConfig:
+    backbone: str = "mlp"
     encoder_hidden_dims: List[int] = field(default_factory=lambda: [512, 256])
     decoder_hidden_dims: List[int] = field(default_factory=lambda: [256, 512])
     ifsq_levels: List[int] = field(default_factory=lambda: [8, 8, 8, 8, 8, 8, 8, 8])
     activation: str = "relu"
     use_layer_norm: bool = True
+    transformer_h_dim: int = 512
+    transformer_ff_size: int = 1024
+    transformer_num_layers: int = 9
+    transformer_num_heads: int = 4
+    transformer_dropout: float = 0.1
+    transformer_normalize_before: bool = False
+    transformer_position_embedding: str = "learned"
 
     @property
     def latent_dim(self) -> int:

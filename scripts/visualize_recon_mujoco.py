@@ -19,6 +19,7 @@ from torch.utils.data import DataLoader
 from motion_ae.config import MotionAEConfig, load_config as load_ae_config
 from motion_ae.dataset import MotionWindowDataset
 from motion_ae.models.autoencoder import MotionAutoEncoder
+from motion_ae.models.factory import build_motion_autoencoder
 from motion_ae.mujoco_recon import (
     clamp_window_state,
     extract_pelvis_root_trajectory,
@@ -141,15 +142,7 @@ def _load_ae_model(
     checkpoint_path: str,
     device: torch.device,
 ) -> MotionAutoEncoder:
-    model = MotionAutoEncoder(
-        feature_dim=feature_dim,
-        window_size=cfg.window_size,
-        encoder_hidden_dims=cfg.model.encoder_hidden_dims,
-        decoder_hidden_dims=cfg.model.decoder_hidden_dims,
-        ifsq_levels=cfg.model.ifsq_levels,
-        activation=cfg.model.activation,
-        use_layer_norm=cfg.model.use_layer_norm,
-    )
+    model = build_motion_autoencoder(cfg, feature_dim)
     ckpt = torch.load(checkpoint_path, map_location=device, weights_only=False)
     state = ckpt.get("model_state_dict", ckpt)
     model.load_state_dict(state)

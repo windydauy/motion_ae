@@ -18,8 +18,8 @@ SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 ROOT="${MOTION_AE_ROOT:-$(cd "${SCRIPT_DIR}/.." && pwd)}"
 cd "${ROOT}"
 
-export CUDA_VISIBLE_DEVICES="${CUDA_VISIBLE_DEVICES:-0,1,2,3,4,6,7}"
-export NPROC_PER_NODE="${NPROC_PER_NODE:-7}"
+export CUDA_VISIBLE_DEVICES="${CUDA_VISIBLE_DEVICES:-1,3,4,5}"
+export NPROC_PER_NODE="${NPROC_PER_NODE:-4}"
 export MASTER_ADDR="${MASTER_ADDR:-127.0.0.1}"
 # 默认端口避开 29500（torchrun 常见默认）等易冲突端口；可用环境变量 MASTER_PORT 覆盖。
 export MASTER_PORT="${MASTER_PORT:-29688}"

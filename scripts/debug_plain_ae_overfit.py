@@ -19,7 +19,7 @@ if PROJECT_ROOT not in sys.path:
 from motion_ae.config import load_config
 from motion_ae.dataset import build_datasets, dataloader_io_options, try_preload_one_dataset
 from motion_ae.losses import ReconstructionLoss
-from motion_ae.models.autoencoder import MotionAutoEncoder
+from motion_ae.models.factory import build_motion_autoencoder
 from motion_ae.models.plain_autoencoder import PlainMotionAutoEncoder
 from motion_ae.utils.experiment import get_device
 from motion_ae.utils.seed import set_seed
@@ -253,15 +253,7 @@ def main() -> None:
         activation=cfg.model.activation,
         use_layer_norm=cfg.model.use_layer_norm,
     )
-    ifsq_model = MotionAutoEncoder(
-        feature_dim=feature_slices.total_dim,
-        window_size=cfg.window_size,
-        encoder_hidden_dims=cfg.model.encoder_hidden_dims,
-        decoder_hidden_dims=cfg.model.decoder_hidden_dims,
-        ifsq_levels=cfg.model.ifsq_levels,
-        activation=cfg.model.activation,
-        use_layer_norm=cfg.model.use_layer_norm,
-    )
+    ifsq_model = build_motion_autoencoder(cfg, feature_slices.total_dim)
     criterion = ReconstructionLoss(
         group_slices=feature_slices.as_dict(),
         group_weights=cfg.loss.group_weights,
