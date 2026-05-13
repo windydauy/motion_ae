@@ -16,6 +16,11 @@ class DataConfig:
     npz_filename: str = "motion.npz"
     val_ratio: float = 0.1
     max_files: Optional[int] = None
+    # packed: eager load and pack all windows into one tensor.
+    # streaming: build a lightweight manifest and load windows from npz on demand.
+    loader_mode: str = "packed"
+    streaming_cache_size: int = 4
+    manifest_workers: int = 4
 
 
 @dataclass

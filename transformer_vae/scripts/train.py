@@ -7,6 +7,7 @@ import os
 import torch
 
 from motion_ae.dataset import build_datasets, build_train_val_loaders, try_preload_datasets_to_gpu
+from motion_ae.streaming_dataset import build_streaming_datasets, build_streaming_train_val_loaders
 from motion_ae.utils.experiment import (
     create_run_dir,
     get_device,
@@ -73,25 +74,36 @@ def main() -> None:
     logger.info("Run directory: %s", run_dir)
     save_config_snapshot(cfg, run_paths["params_dir"])
 
-    train_ds, val_ds, normalizer, feature_slices = build_datasets(cfg)
+    loader_mode = getattr(cfg.data, "loader_mode", "packed")
+    if loader_mode == "streaming":
+        train_ds, val_ds, normalizer, feature_slices, data_meta = build_streaming_datasets(cfg)
+    elif loader_mode == "packed":
+        train_ds, val_ds, normalizer, feature_slices = build_datasets(cfg)
+        data_meta = {}
+    else:
+        raise ValueError(f"Unsupported data.loader_mode: {loader_mode}")
+
     stats_path = os.path.join(run_paths["artifacts_dir"], cfg.normalization.stats_file)
     normalizer.save(stats_path)
     logger.info("Train samples: %d, Val samples: %d", len(train_ds), len(val_ds))
     logger.info("Feature dim: %d, slices: %s", feature_slices.total_dim, feature_slices.as_dict())
 
-    train_on_gpu, val_on_gpu = try_preload_datasets_to_gpu(
-        train_ds,
-        val_ds,
-        device,
-        cfg.training.preload_to_gpu,
-    )
-    train_loader, val_loader = build_train_val_loaders(
-        train_ds,
-        val_ds,
-        cfg,
-        device,
-        data_on_gpu=train_on_gpu and val_on_gpu,
-    )
+    if loader_mode == "streaming":
+        train_loader, val_loader = build_streaming_train_val_loaders(train_ds, val_ds, cfg, device)
+    else:
+        train_on_gpu, val_on_gpu = try_preload_datasets_to_gpu(
+            train_ds,
+            val_ds,
+            device,
+            cfg.training.preload_to_gpu,
+        )
+        train_loader, val_loader = build_train_val_loaders(
+            train_ds,
+            val_ds,
+            cfg,
+            device,
+            data_on_gpu=train_on_gpu and val_on_gpu,
+        )
 
     model = build_model(cfg, feature_slices.total_dim)
     criterion = build_criterion(cfg, feature_slices)
@@ -113,6 +125,8 @@ def main() -> None:
             "val_samples": len(val_ds),
             "feature_dim": feature_slices.total_dim,
             "model_parameters": param_count,
+            "data_loader_mode": loader_mode,
+            **{f"data/{key}": value for key, value in data_meta.items() if isinstance(value, (int, float, str))},
         }
     )
 

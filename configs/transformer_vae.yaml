@@ -5,6 +5,9 @@ data:
   npz_filename: "motion.npz"
   val_ratio: 0.1
   max_files: null
+  loader_mode: "streaming"
+  streaming_cache_size: 4
+  manifest_workers: 4
 
 npz_keys:
   joint_pos: "joint_pos"

@@ -12,6 +12,7 @@ from transformer_vae.models.motion_transformer_vae import MotionTransformerVAE
 def add_common_args(parser: argparse.ArgumentParser) -> None:
     parser.add_argument("--config", type=str, default="configs/transformer_vae.yaml")
     parser.add_argument("--data_path", type=str, default=None)
+    parser.add_argument("--loader_mode", type=str, default=None, choices={"packed", "streaming"})
     parser.add_argument("--max_files", type=int, default=None)
     parser.add_argument("--batch_size", type=int, default=None)
     parser.add_argument("--learning_rate", "--lr", type=float, default=None)
@@ -30,6 +31,8 @@ def add_common_args(parser: argparse.ArgumentParser) -> None:
 def apply_common_overrides(cfg: TransformerVAEConfig, args: argparse.Namespace) -> TransformerVAEConfig:
     if args.data_path is not None:
         cfg.data.data_path = args.data_path
+    if args.loader_mode is not None:
+        cfg.data.loader_mode = args.loader_mode
     if args.max_files is not None:
         cfg.data.max_files = args.max_files
     if args.batch_size is not None:

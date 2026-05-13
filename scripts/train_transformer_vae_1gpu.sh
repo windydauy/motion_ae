@@ -22,6 +22,7 @@ export CUDA_VISIBLE_DEVICES="${GPU:-0}"
 
 DATA_PATH="${DATA_PATH:-/pfs/pfs-ilWc5D/yzh/g1_soma/npz_part}"
 CONFIG="${CONFIG:-configs/transformer_vae.yaml}"
+LOADER_MODE="${LOADER_MODE:-streaming}"
 OUTPUT_ROOT="${OUTPUT_ROOT:-outputs}"
 EXPERIMENT_NAME="${EXPERIMENT_NAME:-transformer_vae}"
 RUN_NAME="${RUN_NAME:-1gpu_npz_part}"
@@ -38,6 +39,7 @@ WANDB_MODE="${WANDB_MODE:-online}"
 exec "${PYTHON:-python}" -m transformer_vae.scripts.train \
   --config "${CONFIG}" \
   --data_path "${DATA_PATH}" \
+  --loader_mode "${LOADER_MODE}" \
   --output_root "${OUTPUT_ROOT}" \
   --experiment_name "${EXPERIMENT_NAME}" \
   --run_name "${RUN_NAME}" \

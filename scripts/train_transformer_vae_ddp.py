@@ -1,10 +1,4 @@
-"""DDP training entrypoint for the transformer motion VAE.
-
-The script trains the full VAE with reconstruction + KL loss. The filename
-keeps "encoder" because this is the distributed entrypoint requested for the
-transformer VAE encoder path, but checkpoints remain compatible with the
-existing transformer_vae evaluate/infer scripts.
-"""
+"""DDP training entrypoint for the transformer motion VAE."""
 from __future__ import annotations
 
 import argparse
@@ -26,6 +20,11 @@ from motion_ae.dataset import (  # noqa: E402
     ensure_sharded_dataset_cache,
     load_sharded_datasets,
     try_preload_datasets_to_gpu,
+)
+from motion_ae.streaming_dataset import (  # noqa: E402
+    build_streaming_datasets,
+    build_streaming_train_val_loaders,
+    ensure_streaming_manifest,
 )
 from motion_ae.utils.experiment import (  # noqa: E402
     create_run_dir,
@@ -252,7 +251,13 @@ def main() -> None:
     if args.no_anneal_lr:
         cfg.training.anneal_lr = False
     cfg.training.distributed = True
-    cfg.training.dataset_cache = True
+    loader_mode = getattr(cfg.data, "loader_mode", "packed")
+    if loader_mode == "packed":
+        cfg.training.dataset_cache = True
+    elif loader_mode == "streaming":
+        cfg.training.preload_to_gpu = False
+    else:
+        raise ValueError(f"Unsupported data.loader_mode: {loader_mode}")
 
     rank, local_rank, world_size, device, backend = _init_distributed(cfg.training.ddp_backend)
     _resolve_local_batch_size(cfg, world_size)
@@ -278,18 +283,29 @@ def main() -> None:
         run_paths_obj[0] = run_paths
         logger.info("Run directory: %s", run_paths["run_dir"])
         save_config_snapshot(cfg, run_paths["params_dir"])
-        logger.info("Ensuring sharded dataset cache from %s", cfg.data.data_path)
-        ensure_sharded_dataset_cache(cfg, world_size)
+        if loader_mode == "streaming":
+            logger.info("Ensuring streaming manifest from %s", cfg.data.data_path)
+            ensure_streaming_manifest(cfg)
+        else:
+            logger.info("Ensuring sharded dataset cache from %s", cfg.data.data_path)
+            ensure_sharded_dataset_cache(cfg, world_size)
 
     dist.broadcast_object_list(run_paths_obj, src=0)
     run_paths = run_paths_obj[0]
     dist.barrier()
 
-    train_ds, val_ds, normalizer, feature_slices, shard_meta = load_sharded_datasets(
-        cfg,
-        rank=rank,
-        world_size=world_size,
-    )
+    if loader_mode == "streaming":
+        train_ds, val_ds, normalizer, feature_slices, shard_meta = build_streaming_datasets(
+            cfg,
+            rank=rank,
+            world_size=world_size,
+        )
+    else:
+        train_ds, val_ds, normalizer, feature_slices, shard_meta = load_sharded_datasets(
+            cfg,
+            rank=rank,
+            world_size=world_size,
+        )
     if is_main:
         stats_path = os.path.join(run_paths["artifacts_dir"], cfg.normalization.stats_file)
         normalizer.save(stats_path)
@@ -303,19 +319,22 @@ def main() -> None:
         )
         logger.info("Normalization stats saved to %s", stats_path)
 
-    train_on_gpu, val_on_gpu = try_preload_datasets_to_gpu(
-        train_ds,
-        val_ds,
-        device,
-        cfg.training.preload_to_gpu,
-    )
-    train_loader, val_loader = build_train_val_loaders(
-        train_ds,
-        val_ds,
-        cfg,
-        device,
-        data_on_gpu=train_on_gpu and val_on_gpu,
-    )
+    if loader_mode == "streaming":
+        train_loader, val_loader = build_streaming_train_val_loaders(train_ds, val_ds, cfg, device)
+    else:
+        train_on_gpu, val_on_gpu = try_preload_datasets_to_gpu(
+            train_ds,
+            val_ds,
+            device,
+            cfg.training.preload_to_gpu,
+        )
+        train_loader, val_loader = build_train_val_loaders(
+            train_ds,
+            val_ds,
+            cfg,
+            device,
+            data_on_gpu=train_on_gpu and val_on_gpu,
+        )
 
     model = build_model(cfg, feature_slices.total_dim).to(device)
     if device.type == "cuda":
@@ -367,6 +386,7 @@ def main() -> None:
                 "local_val_samples": len(val_ds),
                 "feature_dim": feature_slices.total_dim,
                 "model_parameters": param_count,
+                "data_loader_mode": loader_mode,
                 "ddp/world_size": world_size,
                 "ddp/batch_size_mode": cfg.training.batch_size_mode,
                 "ddp/local_batch_size": cfg.training.batch_size,

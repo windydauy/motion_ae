@@ -18,7 +18,7 @@ SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 ROOT="${MOTION_AE_ROOT:-$(cd "${SCRIPT_DIR}/.." && pwd)}"
 cd "${ROOT}"
 
-export CUDA_VISIBLE_DEVICES="${CUDA_VISIBLE_DEVICES:-0,2,3,4,5,6}"
+# export CUDA_VISIBLE_DEVICES="${CUDA_VISIBLE_DEVICES:-0,2,3,4,5,6}"
 
 NPROC="${NPROC_PER_NODE:-6}"
 NNODES="${NNODES:-1}"
@@ -26,8 +26,9 @@ NODE_RANK="${NODE_RANK:-0}"
 MASTER_ADDR="${MASTER_ADDR:-127.0.0.1}"
 MASTER_PORT="${MASTER_PORT:-29501}"
 
-DATA_PATH="${DATA_PATH:-/pfs/pfs-ilWc5D/yzh/g1_soma/npz}"
+DATA_PATH="${DATA_PATH:-/pfs/pfs-ilWc5D/yzh/g1_soma/npz_part}"
 CONFIG="${CONFIG:-configs/transformer_vae.yaml}"
+LOADER_MODE="${LOADER_MODE:-streaming}"
 OUTPUT_ROOT="${OUTPUT_ROOT:-outputs}"
 EXPERIMENT_NAME="${EXPERIMENT_NAME:-transformer_vae_encoder_ddp}"
 RUN_NAME="${RUN_NAME:-npz_all_ddp}"
@@ -40,7 +41,7 @@ EVAL_STEPS="${EVAL_STEPS:-10}"
 SAVE_EVERY="${SAVE_EVERY:-20000}"
 NUM_WORKERS="${NUM_WORKERS:-16}"
 LOGGER="${LOGGER:-wandb}"
-WANDB_MODE="${WANDB_MODE:-online}"
+WANDB_MODE="${WANDB_MODE:-offline}"
 DDP_BACKEND="${DDP_BACKEND:-nccl}"
 
 exec torchrun \
@@ -52,6 +53,7 @@ exec torchrun \
   scripts/train_transformer_vae_ddp.py \
   --config "${CONFIG}" \
   --data_path "${DATA_PATH}" \
+  --loader_mode "${LOADER_MODE}" \
   --output_root "${OUTPUT_ROOT}" \
   --experiment_name "${EXPERIMENT_NAME}" \
   --run_name "${RUN_NAME}" \

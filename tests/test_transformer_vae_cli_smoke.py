@@ -35,6 +35,9 @@ def _write_small_config(path: str, data_root: str, output_root: str):
     cfg = TransformerVAEConfig()
     cfg.data.data_path = data_root
     cfg.data.val_ratio = 0.5
+    cfg.data.loader_mode = "streaming"
+    cfg.data.manifest_workers = 1
+    cfg.data.streaming_cache_size = 2
     cfg.training.output_root = output_root
     cfg.training.experiment_name = "transformer_vae_smoke"
     cfg.training.run_name = "smoke"

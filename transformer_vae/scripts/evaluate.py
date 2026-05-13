@@ -8,6 +8,7 @@ import torch
 from torch.utils.data import DataLoader
 
 from motion_ae.dataset import build_datasets, dataloader_io_options, try_preload_one_dataset
+from motion_ae.streaming_dataset import build_streaming_datasets, build_streaming_loader
 from motion_ae.utils.experiment import get_device, resolve_eval_checkpoint, save_metrics_json
 from motion_ae.utils.logging import get_logger
 from motion_ae.utils.seed import set_seed
@@ -55,17 +56,28 @@ def main() -> None:
     eval_dir = os.path.join(run_dir, "eval")
     os.makedirs(eval_dir, exist_ok=True)
 
-    train_ds, val_ds, _normalizer, feature_slices = build_datasets(cfg, stats_path=stats_path)
-    ds = val_ds if args.split == "val" else train_ds
-    data_on_gpu = try_preload_one_dataset(ds, device, cfg.training.preload_to_gpu)
-    num_workers, pin_memory = dataloader_io_options(device, data_on_gpu, cfg.training.num_workers)
-    loader = DataLoader(
-        ds,
-        batch_size=cfg.training.batch_size,
-        shuffle=False,
-        num_workers=num_workers,
-        pin_memory=pin_memory,
-    )
+    loader_mode = getattr(cfg.data, "loader_mode", "packed")
+    if loader_mode == "streaming":
+        train_ds, val_ds, _normalizer, feature_slices, _data_meta = build_streaming_datasets(
+            cfg,
+            stats_path=stats_path,
+        )
+        ds = val_ds if args.split == "val" else train_ds
+        loader = build_streaming_loader(ds, cfg, device, shuffle=False, drop_last=False)
+    elif loader_mode == "packed":
+        train_ds, val_ds, _normalizer, feature_slices = build_datasets(cfg, stats_path=stats_path)
+        ds = val_ds if args.split == "val" else train_ds
+        data_on_gpu = try_preload_one_dataset(ds, device, cfg.training.preload_to_gpu)
+        num_workers, pin_memory = dataloader_io_options(device, data_on_gpu, cfg.training.num_workers)
+        loader = DataLoader(
+            ds,
+            batch_size=cfg.training.batch_size,
+            shuffle=False,
+            num_workers=num_workers,
+            pin_memory=pin_memory,
+        )
+    else:
+        raise ValueError(f"Unsupported data.loader_mode: {loader_mode}")
 
     model = build_model(cfg, feature_slices.total_dim)
     ckpt = torch.load(checkpoint_path, map_location=device, weights_only=False)
